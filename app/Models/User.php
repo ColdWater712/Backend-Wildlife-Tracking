@@ -6,45 +6,44 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles; // <-- BARIS BARU: Import trait HasRoles
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    // <-- BARIS BARU: Tambahkan HasRoles di sini
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
-    // Konfigurasi Tabel & Primary Key
-    protected $table = 'users';
-    protected $primaryKey = 'user_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
-
-    // Tabel ini hanya punya created_at, tidak ada updated_at
-    const UPDATED_AT = null;
-
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
     protected $fillable = [
         'name',
         'email',
         'password',
-        'role',
     ];
 
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
     protected $hidden = [
         'password',
+        'remember_token',
     ];
 
-    protected $casts = [
-        'created_at' => 'datetime',
-    ];
-
-    // --- Relasi (Sesuai Dokumen) ---
-    public function incidentReports() {
-        return $this->hasMany(IncidentReport::class, 'user_id', 'user_id');
-    }
-
-    public function geoZones() {
-        return $this->hasMany(GeoZone::class, 'created_by', 'user_id');
-    }
-
-    public function activityLogs() {
-        return $this->hasMany(ActivityLog::class, 'user_id', 'user_id');
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
     }
 }
