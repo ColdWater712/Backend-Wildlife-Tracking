@@ -11,6 +11,28 @@ class GPSReadingController extends Controller
 {
     // ... (method index dan byAnimal yang sudah ada biarkan saja) ...
 
+    public function index()
+{
+    try {
+        $readings = GPSReading::orderBy('recorded_at', 'desc')->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Data GPS berhasil diambil.',
+            'data' => $readings,
+            'errors' => null
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mengambil data GPS.',
+            'data' => null,
+            'errors' => ['database' => [$e->getMessage()]]
+        ], 500);
+    }
+}
+
     public function store(StoreGpsReadingRequest $request)
     {
         try {
