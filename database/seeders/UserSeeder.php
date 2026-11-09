@@ -4,23 +4,43 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
     public function run(): void
     {
         $users = [
-            [1, 'Ir. Drajat Mustofa, S.Kom', 'user1@wildlife.id', '$2y$12$dummyhashpassword', 'administrator_sistem', '2026-10-19 14:43:26'],
-            [2, 'Adiarja Haryanto', 'user2@wildlife.id', '$2y$12$dummyhashpassword', 'peneliti_ekologi', '2026-10-19 14:43:26'],
-            [3, 'Mutia Purnawati', 'user3@wildlife.id', '$2y$12$dummyhashpassword', 'konservasionis_lapangan', '2026-10-19 14:43:26'],
-            [4, 'Tgk. Baktianto Pratama, S.Kom', 'user4@wildlife.id', '$2y$12$dummyhashpassword', 'pengambil_kebijakan', '2026-10-19 14:43:26'],
-            [5, 'Asmadi Waskita', 'user5@wildlife.id', '$2y$12$dummyhashpassword', 'peneliti_ekologi', '2026-10-19 14:43:26'],
+            [
+                'name' => 'Admin Sistem',
+                'email' => 'admin@wildlife.id',
+                'password' => Hash::make('password123'), // Password di-hash dengan aman
+                'role' => 'administrator_sistem',
+                'created_at' => now(),
+            ],
+            [
+                'name' => 'Peneliti Ekologi',
+                'email' => 'peneliti@wildlife.id',
+                'password' => Hash::make('password123'),
+                'role' => 'peneliti_ekologi',
+                'created_at' => now(),
+            ],
+            [
+                'name' => 'Konservasionis Lapangan',
+                'email' => 'lapangan@wildlife.id',
+                'password' => Hash::make('password123'),
+                'role' => 'konservasionis_lapangan',
+                'created_at' => now(),
+            ],
+            [
+                'name' => 'Pengambil Kebijakan',
+                'email' => 'kebijakan@wildlife.id',
+                'password' => Hash::make('password123'),
+                'role' => 'pengambil_kebijakan',
+                'created_at' => now(),
+            ],
         ];
-        foreach ($users as $u) {
-            DB::table('users')->updateOrInsert(
-                ['user_id' => $u[0]],
-                ['name' => $u[1], 'email' => $u[2], 'password' => $u[3], 'role' => $u[4], 'created_at' => $u[5]]
-            );
-        }
+
+        DB::table('users')->insert($users);
     }
 }

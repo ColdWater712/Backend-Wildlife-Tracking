@@ -8,16 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('permissions', function (Blueprint $table) {
-            $table->increments('permission_id');
-            $table->string('permission_name', 100)->unique('uq_permissions_name');
+        Schema::create('roles', function (Blueprint $table) {
+            $table->id('role_id');
+            $table->string('role_name', 50)->unique();
             $table->string('description', 255)->nullable();
-            $table->dateTime('created_at')->useCurrent();
+            $table->timestamp('created_at')->useCurrent();
+            
+            $table->primary('role_id');
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('permissions');
+        Schema::dropIfExists('roles');
     }
 };

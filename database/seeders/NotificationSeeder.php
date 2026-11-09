@@ -9,18 +9,12 @@ class NotificationSeeder extends Seeder
 {
     public function run(): void
     {
-        $notifs = [
-            [1, 1, 'risk_zone', 'SATWA-281 memasuki zona perkebunan', 2, 2, 2, 0, '2026-10-19 09:45:00'],
-            [2, 2, 'device_alert', 'Baterai perangkat SATWA-387 lemah', 3, 3, 3, 1, '2026-10-19 11:20:00'],
-            [3, 3, 'system', 'Laporan harian siap diunduh', null, null, null, 1, '2026-10-19 08:00:00'],
-            [4, 1, 'risk_zone', 'SATWA-968 terdeteksi di zona lindung', 5, 5, 5, 0, '2026-10-15 09:00:00'],
-            [5, 2, 'device_alert', 'Perangkat SATWA-387 kehilangan sinyal', 3, 3, 3, 0, '2026-10-19 11:25:00'],
-        ];
-        foreach ($notifs as $n) {
-            DB::table('notifications')->updateOrInsert(
-                ['notif_id' => $n[0]],
-                ['user_id' => $n[1], 'notification_type' => $n[2], 'message' => $n[3], 'animal_id' => $n[4], 'zone_id' => $n[5], 'device_id' => $n[6], 'is_read' => $n[7], 'created_at' => $n[8]]
-            );
-        }
+        DB::table('notifications')->insert([
+            ['notif_id' => 1, 'user_id' => 1, 'notification_type' => 'risk_zone', 'message' => 'SATWA-281 memasuki zona perkebunan', 'animal_id' => 2, 'zone_id' => 2, 'device_id' => 2, 'is_read' => 0, 'created_at' => '2026-10-19 09:45:00'],
+            ['notif_id' => 2, 'user_id' => 2, 'notification_type' => 'device_alert', 'message' => 'Baterai perangkat SATWA-387 lemah', 'animal_id' => 3, 'zone_id' => 3, 'device_id' => 3, 'is_read' => 1, 'created_at' => '2026-10-19 11:20:00'],
+            ['notif_id' => 3, 'user_id' => 3, 'notification_type' => 'system', 'message' => 'Laporan harian siap diunduh', 'animal_id' => null, 'zone_id' => null, 'device_id' => null, 'is_read' => 1, 'created_at' => '2026-10-19 08:00:00'],
+            ['notif_id' => 4, 'user_id' => 1, 'notification_type' => 'risk_zone', 'message' => 'SATWA-968 terdeteksi di zona lindung', 'animal_id' => 5, 'zone_id' => 5, 'device_id' => 5, 'is_read' => 0, 'created_at' => '2026-10-15 09:00:00'],
+            ['notif_id' => 5, 'user_id' => 2, 'notification_type' => 'device_alert', 'message' => 'Perangkat SATWA-387 kehilangan sinyal', 'animal_id' => 3, 'zone_id' => 3, 'device_id' => 3, 'is_read' => 0, 'created_at' => '2026-10-19 11:25:00'],
+        ]);
     }
 }

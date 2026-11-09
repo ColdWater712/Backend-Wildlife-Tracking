@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\GeoZoneResource;
 use App\Models\GeoZone;
 use Illuminate\Http\Request;
 
@@ -11,60 +10,34 @@ class GeoZoneController extends Controller
 {
     public function index()
     {
-        $zones = GeoZone::with(['creator'])->get();
-        return GeoZoneResource::collection($zones);
-    }
-
-    public function show($id)
-    {
-        $zone = GeoZone::with(['creator'])->find($id);
-        if (!$zone) {
-            return response()->json(['message' => 'GeoZone not found'], 404);
-        }
-        return new GeoZoneResource($zone);
+        $zones = GeoZone::with('creator')->get();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $zones
+        ], 200);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'zone_name' => 'required|string|max:150',
             'zone_type' => 'required|string|max:50',
-            'center_lat' => 'nullable|numeric',
-            'center_lon' => 'nullable|numeric',
+            'center_lat' => 'required|numeric',
+            'center_lon' => 'required|numeric',
             'radius_km' => 'nullable|numeric',
-            'polygon_geojson' => 'nullable',
-            'created_by' => 'nullable|integer|exists:users,user_id',
         ]);
-        $zone = GeoZone::create($validated);
-        return new GeoZoneResource($zone);
-    }
 
-    public function update(Request $request, $id)
-    {
-        $zone = GeoZone::find($id);
-        if (!$zone) {
-            return response()->json(['message' => 'GeoZone not found'], 404);
-        }
-        $validated = $request->validate([
-            'zone_name' => 'sometimes|string|max:150',
-            'zone_type' => 'sometimes|string|max:50',
-            'center_lat' => 'nullable|numeric',
-            'center_lon' => 'nullable|numeric',
-            'radius_km' => 'nullable|numeric',
-            'polygon_geojson' => 'nullable',
-            'created_by' => 'nullable|integer|exists:users,user_id',
-        ]);
-        $zone->update($validated);
-        return new GeoZoneResource($zone);
-    }
+        // Set created_by dari user yang sedang login
+        $data = $request->all();
+        $data['created_by'] = $request->user()->user_id;
 
-    public function destroy($id)
-    {
-        $zone = GeoZone::find($id);
-        if (!$zone) {
-            return response()->json(['message' => 'GeoZone not found'], 404);
-        }
-        $zone->delete();
-        return response()->json(['message' => 'GeoZone deleted']);
+        $zone = GeoZone::create($data);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Zona berhasil dibuat',
+            'data' => $zone
+        ], 201);
     }
 }

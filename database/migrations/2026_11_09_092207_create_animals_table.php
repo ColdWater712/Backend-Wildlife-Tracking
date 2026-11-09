@@ -9,15 +9,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('animals', function (Blueprint $table) {
-            $table->increments('animal_id');
+            $table->unsignedInteger('animal_id')->autoIncrement();
             $table->unsignedInteger('species_id');
             $table->string('name', 100);
             $table->date('birth_date')->nullable();
             $table->enum('gender', ['male', 'female', 'unknown'])->default('unknown');
             $table->boolean('is_active')->default(true);
-            $table->foreign('species_id', 'fk_animals_species')->references('species_id')->on('species')->restrictOnDelete()->cascadeOnUpdate();
-            $table->index('species_id', 'idx_animals_species');
-            $table->index('is_active', 'idx_animals_is_active');
+            
+            $table->primary('animal_id');
+            $table->foreign('species_id')->references('species_id')->on('species')->restrictOnDelete()->cascadeOnUpdate();
         });
     }
 

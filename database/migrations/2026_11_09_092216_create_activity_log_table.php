@@ -9,14 +9,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('activity_log', function (Blueprint $table) {
-            $table->bigIncrements('log_id');
+            $table->unsignedBigInteger('log_id')->autoIncrement();
             $table->unsignedInteger('user_id')->nullable();
             $table->string('action', 100);
-            $table->dateTime('timestamp')->useCurrent();
+            $table->timestamp('timestamp')->useCurrent();
             $table->text('details')->nullable();
-            $table->foreign('user_id', 'fk_log_user')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
-            $table->index(['user_id', 'timestamp'], 'idx_log_user_time');
-            $table->index('timestamp', 'idx_log_time');
+            
+            $table->primary('log_id');
+            $table->foreign('user_id')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
         });
     }
 

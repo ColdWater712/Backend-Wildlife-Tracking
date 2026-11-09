@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -11,38 +10,21 @@ class GpsReading extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'device_id',
-        'latitude',
-        'longitude',
-        'recorded_at',
-        'altitude_meters',
-        'accuracy_meters',
-        'checksum',
+        'device_id', 'latitude', 'longitude', 'recorded_at', 
+        'altitude_meters', 'accuracy_meters', 'checksum'
     ];
 
     protected function casts(): array
     {
         return [
+            'recorded_at' => 'datetime',
             'latitude' => 'decimal:6',
             'longitude' => 'decimal:6',
-            'altitude_meters' => 'decimal:2',
-            'accuracy_meters' => 'decimal:2',
-            'recorded_at' => 'datetime',
         ];
     }
 
-    public function trackingDevice()
+    public function device()
     {
         return $this->belongsTo(TrackingDevice::class, 'device_id', 'device_id');
-    }
-
-    public function animalGeoZones()
-    {
-        return $this->hasMany(AnimalGeoZone::class, 'entry_reading_id', 'reading_id');
-    }
-
-    public function weatherData()
-    {
-        return $this->hasOne(WeatherData::class, 'reading_id', 'reading_id');
     }
 }

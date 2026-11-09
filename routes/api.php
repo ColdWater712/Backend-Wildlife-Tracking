@@ -1,46 +1,60 @@
 <?php
 
-use App\Http\Controllers\Api\ActivityLogController;
-use App\Http\Controllers\Api\AggregateReportController;
-use App\Http\Controllers\Api\AiMediaUploadController;
-use App\Http\Controllers\Api\AiPredictionController;
-use App\Http\Controllers\Api\AnimalController;
-use App\Http\Controllers\Api\AnimalGeoZoneController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\GeoZoneController;
+use App\Http\Controllers\Api\SpeciesController;
+use App\Http\Controllers\Api\AnimalController;
+use App\Http\Controllers\Api\TrackingDeviceController;
 use App\Http\Controllers\Api\GpsReadingController;
+use App\Http\Controllers\Api\GeoZoneController;
 use App\Http\Controllers\Api\IncidentReportController;
 use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\Api\PermissionController;
-use App\Http\Controllers\Api\RoleController;
-use App\Http\Controllers\Api\RolePermissionController;
-use App\Http\Controllers\Api\SpeciesController;
-use App\Http\Controllers\Api\TrackingDeviceController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\WeatherDataController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\AiPredictionController;
 use Illuminate\Support\Facades\Route;
 
+// ==========================================
+// PUBLIC ROUTES (Tidak butuh Token)
+// ==========================================
 Route::post('/login', [AuthController::class, 'login']);
 
+// ==========================================
+// PROTECTED ROUTES (Butuh Token Bearer)
+// ==========================================
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/me', [AuthController::class, 'me']);
+    
+    // --- Auth & User ---
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', function (\Illuminate\Http\Request $request) {
+        return response()->json(['success' => true, 'data' => $request->user()]);
+    });
 
-    Route::apiResource('users', UserController::class);
-    Route::apiResource('roles', RoleController::class);
-    Route::apiResource('permissions', PermissionController::class);
-    Route::post('role-permissions/sync', [RolePermissionController::class, 'sync']);
-    Route::apiResource('species', SpeciesController::class);
-    Route::apiResource('animals', AnimalController::class);
-    Route::apiResource('tracking-devices', TrackingDeviceController::class);
-    Route::apiResource('geo-zones', GeoZoneController::class);
-    Route::apiResource('gps-readings', GpsReadingController::class);
-    Route::apiResource('animal-geo-zones', AnimalGeoZoneController::class);
-    Route::apiResource('incident-reports', IncidentReportController::class);
-    Route::apiResource('ai-media-uploads', AiMediaUploadController::class);
-    Route::apiResource('ai-predictions', AiPredictionController::class);
-    Route::apiResource('weather-data', WeatherDataController::class);
-    Route::apiResource('notifications', NotificationController::class);
-    Route::apiResource('activity-log', ActivityLogController::class);
-    Route::apiResource('aggregate-reports', AggregateReportController::class);
+    // --- Dashboard ---
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    // --- Domain Utama (Satwa & Pelacakan) ---
+    Route::get('/species', [SpeciesController::class, 'index']);
+    Route::get('/species/{id}', [SpeciesController::class, 'show']);
+
+    Route::get('/animals', [AnimalController::class, 'index']);
+    Route::post('/animals', [AnimalController::class, 'store']);
+
+    Route::get('/devices', [TrackingDeviceController::class, 'index']);
+    Route::get('/devices/{id}', [TrackingDeviceController::class, 'show']);
+
+    Route::get('/gps-readings', [GpsReadingController::class, 'index']);
+    Route::post('/gps-readings', [GpsReadingController::class, 'store']);
+
+    // --- Fitur Pendukung ---
+    Route::get('/geo-zones', [GeoZoneController::class, 'index']);
+    Route::post('/geo-zones', [GeoZoneController::class, 'store']);
+
+    Route::get('/incidents', [IncidentReportController::class, 'index']);
+    Route::post('/incidents', [IncidentReportController::class, 'store']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+
+    // --- Fitur AI ---
+    Route::get('/ai-predictions', [AiPredictionController::class, 'index']);
+    Route::post('/ai-predictions/{id}/verify', [AiPredictionController::class, 'verify']);
 });

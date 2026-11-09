@@ -9,18 +9,19 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('tracking_devices', function (Blueprint $table) {
-            $table->increments('device_id');
-            $table->unsignedInteger('animal_id')->nullable()->unique('uq_devices_animal');
+            $table->unsignedInteger('device_id')->autoIncrement();
+            $table->unsignedInteger('animal_id')->nullable()->unique();
             $table->string('model', 100);
             $table->date('installation_date')->nullable();
             $table->unsignedSmallInteger('battery_life_months')->nullable();
             $table->boolean('is_active')->default(true);
             $table->enum('device_condition', ['normal', 'damaged', 'lost'])->default('normal');
-            $table->unsignedTinyInteger('battery_level')->nullable();
+            $table->unsignedTinyInteger('battery_level')->nullable()->comment('persen 0-100');
             $table->unsignedTinyInteger('signal_strength')->nullable();
-            $table->dateTime('last_recorded_at')->nullable();
-            $table->foreign('animal_id', 'fk_devices_animal')->references('animal_id')->on('animals')->nullOnDelete()->cascadeOnUpdate();
-            $table->index(['is_active', 'last_recorded_at'], 'idx_devices_monitor');
+            $table->timestamp('last_recorded_at')->nullable();
+            
+            $table->primary('device_id');
+            $table->foreign('animal_id')->references('animal_id')->on('animals')->nullOnDelete()->cascadeOnUpdate();
         });
     }
 

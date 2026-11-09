@@ -11,10 +11,10 @@ return new class extends Migration
         Schema::create('role_permissions', function (Blueprint $table) {
             $table->unsignedInteger('role_id');
             $table->unsignedInteger('permission_id');
+            
             $table->primary(['role_id', 'permission_id']);
-            $table->foreign('permission_id', 'fk_rp_permission')->references('permission_id')->on('permissions')->cascadeOnUpdate()->cascadeOnDelete();
-            $table->foreign('role_id', 'fk_rp_role')->references('role_id')->on('roles')->cascadeOnUpdate()->cascadeOnDelete();
-            $table->index('permission_id', 'idx_rp_permission');
+            $table->foreign('role_id')->references('role_id')->on('roles')->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreign('permission_id')->references('permission_id')->on('permissions')->cascadeOnDelete()->cascadeOnUpdate();
         });
     }
 

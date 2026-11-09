@@ -8,15 +8,10 @@ class Animal extends Model
 {
     protected $table = 'animals';
     protected $primaryKey = 'animal_id';
+    public $incrementing = true;  // ← TAMBAHKAN BARIS INI
     public $timestamps = false;
 
-    protected $fillable = [
-        'species_id',
-        'name',
-        'birth_date',
-        'gender',
-        'is_active',
-    ];
+    protected $fillable = ['species_id', 'name', 'birth_date', 'gender', 'is_active'];
 
     protected function casts(): array
     {
@@ -34,15 +29,5 @@ class Animal extends Model
     public function trackingDevice()
     {
         return $this->hasOne(TrackingDevice::class, 'animal_id', 'animal_id');
-    }
-
-    public function animalGeoZones()
-    {
-        return $this->hasMany(AnimalGeoZone::class, 'animal_id', 'animal_id');
-    }
-
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class, 'animal_id', 'animal_id');
     }
 }

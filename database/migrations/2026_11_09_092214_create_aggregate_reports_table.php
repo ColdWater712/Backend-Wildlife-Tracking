@@ -9,16 +9,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('aggregate_reports', function (Blueprint $table) {
-            $table->increments('report_id');
+            $table->unsignedInteger('report_id')->autoIncrement();
             $table->unsignedInteger('generated_by')->nullable();
             $table->enum('report_type', ['daily', 'weekly', 'monthly']);
             $table->date('period_start');
             $table->date('period_end');
-            $table->dateTime('generated_at')->useCurrent();
+            $table->timestamp('generated_at')->useCurrent();
             $table->string('file_path', 500)->nullable();
-            $table->foreign('generated_by', 'fk_ar_user')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
-            $table->index(['report_type', 'period_start', 'period_end'], 'idx_ar_period');
-            $table->index('generated_by', 'idx_ar_user');
+            
+            $table->primary('report_id');
+            $table->foreign('generated_by')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
         });
     }
 

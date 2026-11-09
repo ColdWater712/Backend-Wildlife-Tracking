@@ -10,17 +10,13 @@ class SpeciesSeeder extends Seeder
     public function run(): void
     {
         $species = [
-            [1, 'Orangutan Sumatra', 'Pongo abelii', 'Critically Endangered'],
-            [2, 'Harimau Sumatra', 'Panthera tigris sumatrae', 'Critically Endangered'],
-            [3, 'Badak Sumatra', 'Dicerorhinus sumatrensis', 'Critically Endangered'],
-            [4, 'Gajah Sumatra', 'Elephas maximus sumatranus', 'Critically Endangered'],
-            [5, 'Beruang Madu', 'Helarctos malayanus', 'Vulnerable'],
+            ['common_name' => 'Orangutan Sumatra', 'scientific_name' => 'Pongo abelii', 'conservation_status' => 'Critically Endangered'],
+            ['common_name' => 'Harimau Sumatra', 'scientific_name' => 'Panthera tigris sumatrae', 'conservation_status' => 'Critically Endangered'],
+            ['common_name' => 'Badak Sumatra', 'scientific_name' => 'Dicerorhinus sumatrensis', 'conservation_status' => 'Critically Endangered'],
+            ['common_name' => 'Gajah Sumatra', 'scientific_name' => 'Elephas maximus sumatranus', 'conservation_status' => 'Critically Endangered'],
+            ['common_name' => 'Beruang Madu', 'scientific_name' => 'Helarctos malayanus', 'conservation_status' => 'Vulnerable'],
         ];
-        foreach ($species as $s) {
-            DB::table('species')->updateOrInsert(
-                ['species_id' => $s[0]],
-                ['common_name' => $s[1], 'scientific_name' => $s[2], 'conservation_status' => $s[3]]
-            );
-        }
+
+        DB::table('species')->insert($species);
     }
 }
