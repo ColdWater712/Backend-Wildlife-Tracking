@@ -27,12 +27,18 @@ class IncidentReportController extends Controller
             'location' => 'required|string|max:255',
             'description' => 'required|string',
             'animal_code' => 'nullable|string|max:50',
-            'photo_url' => 'nullable|string|max:500',
+            'photo_url' => [
+                'nullable',
+                'url',
+                'regex:/\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i'
+            ],
+        ], [
+            'photo_url.regex' => 'URL foto harus berakhiran dengan ekstensi gambar (.jpg, .jpeg, .png, .gif, .webp, .bmp, .svg).',
+            'photo_url.url' => 'Format URL foto tidak valid.',
         ]);
 
         $data = $request->all();
         
-        // Set timestamp manual jika tidak dikirim (menggunakan waktu sekarang)
         if (!isset($data['timestamp'])) {
             $data['timestamp'] = now();
         }
