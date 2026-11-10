@@ -8,9 +8,10 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $notifications = Notification::with(['user', 'animal', 'zone', 'device'])
+            ->where('user_id', $request->user()->user_id)
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -38,9 +39,10 @@ class NotificationController extends Controller
         ], 200);
     }
 
-    public function markAsRead($id)
+    public function markAsRead(Request $request, $id)
     {
-        $notification = Notification::find($id);
+        $notification = Notification::where('user_id', $request->user()->user_id)
+            ->find($id);
 
         if (!$notification) {
             return response()->json([

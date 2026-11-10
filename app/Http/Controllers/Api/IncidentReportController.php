@@ -11,6 +11,20 @@ class IncidentReportController extends Controller
 {
     // ... (method index dan show yang sudah ada biarkan saja) ...
 
+    public function index(Request $request)
+    {
+    $reports = IncidentReport::query()
+        ->orderBy('timestamp', 'desc')
+        ->get();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Data laporan insiden berhasil diambil.',
+        'data' => $reports,
+        'errors' => null
+    ], 200);
+    }
+
     public function store(StoreIncidentReportRequest $request)
     {
         // Data user_id diambil dari user yang sedang login (token)
