@@ -9,12 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('permissions', function (Blueprint $table) {
-            $table->unsignedInteger('permission_id')->autoIncrement();
+            $table->id('permission_id');
             $table->string('permission_name', 100)->unique();
             $table->string('description', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
-            
-            $table->primary('permission_id');
         });
     }
 

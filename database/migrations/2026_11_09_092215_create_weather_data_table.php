@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('weather_data', function (Blueprint $table) {
-            $table->unsignedBigInteger('weather_id')->autoIncrement();
+            $table->id('weather_id');
             $table->unsignedBigInteger('reading_id')->nullable();
             $table->decimal('latitude', 9, 6);
             $table->decimal('longitude', 10, 6);
@@ -20,7 +20,6 @@ return new class extends Migration
             $table->decimal('pressure_hpa', 7, 2)->nullable();
             $table->string('source', 50)->default('WeatherAPI.com');
             
-            $table->primary('weather_id');
             $table->foreign('reading_id')->references('reading_id')->on('gps_readings')->nullOnDelete()->cascadeOnUpdate();
         });
     }

@@ -9,13 +9,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('activity_log', function (Blueprint $table) {
-            $table->unsignedBigInteger('log_id')->autoIncrement();
-            $table->unsignedInteger('user_id')->nullable();
+            $table->id('log_id');
+            $table->unsignedBigInteger('user_id')->nullable();
             $table->string('action', 100);
             $table->timestamp('timestamp')->useCurrent();
             $table->text('details')->nullable();
             
-            $table->primary('log_id');
             $table->foreign('user_id')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
         });
     }

@@ -13,8 +13,6 @@ return new class extends Migration
             $table->string('role_name', 50)->unique();
             $table->string('description', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
-            
-            $table->primary('role_id');
         });
     }
 

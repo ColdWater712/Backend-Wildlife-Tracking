@@ -13,8 +13,6 @@ return new class extends Migration
             $table->string('common_name', 100);
             $table->string('scientific_name', 150)->unique();
             $table->string('conservation_status', 50);
-            
-            $table->primary('species_id');
         });
     }
 
