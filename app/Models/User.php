@@ -12,7 +12,7 @@ class User extends Authenticatable
 
     protected $table = 'users';
     protected $primaryKey = 'user_id';
-    const UPDATED_AT = null; // Penting: Tabel ini tidak punya kolom updated_at
+    const UPDATED_AT = null; 
 
     protected $fillable = ['name', 'email', 'password', 'role'];
     protected $hidden = ['password'];

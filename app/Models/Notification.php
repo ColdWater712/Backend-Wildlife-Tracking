@@ -11,7 +11,6 @@ class Notification extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    // ✅ 'user_id' TIDAK di fillable (akan di-force dari sistem)
     protected $fillable = [
         'notification_type',
         'message',

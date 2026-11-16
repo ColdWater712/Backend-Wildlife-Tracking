@@ -13,7 +13,6 @@ class GpsReadingController extends Controller
     {
         $query = GpsReading::with(['device.animal.species']);
 
-        // Filter by device_id jika ada
         if ($request->has('device_id')) {
             $query->where('device_id', $request->device_id);
         }
@@ -30,7 +29,6 @@ class GpsReadingController extends Controller
     {
         $validated = $request->validated();
 
-        // ✅ Force checksum dari data yang divalidasi (bukan dari input user)
         $payload = json_encode([
             'device_id' => $validated['device_id'],
             'latitude' => $validated['latitude'],

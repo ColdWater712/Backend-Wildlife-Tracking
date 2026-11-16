@@ -21,10 +21,8 @@ class AnimalController extends Controller
 
     public function store(StoreAnimalRequest $request)
     {
-        // ✅ HANYA ambil data yang sudah divalidasi
         $validated = $request->validated();
 
-        // ✅ Force default value, jangan percaya input user
         $validated['is_active'] = true;
 
         $animal = Animal::create($validated);

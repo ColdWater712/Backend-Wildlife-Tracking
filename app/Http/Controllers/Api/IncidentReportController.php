@@ -13,7 +13,6 @@ class IncidentReportController extends Controller
     {
         $query = IncidentReport::with('reporter');
 
-        // Filter by user (kecuali admin bisa lihat semua)
         if ($request->user()->role !== 'administrator_sistem') {
             $query->where('user_id', $request->user()->user_id);
         }
@@ -28,13 +27,11 @@ class IncidentReportController extends Controller
 
     public function store(StoreIncidentReportRequest $request)
     {
-        // ✅ HANYA ambil data yang sudah divalidasi
         $validated = $request->validated();
 
-        // ✅ Force nilai yang TIDAK BOLEH dimanipulasi user
-        $validated['user_id'] = $request->user()->user_id; // Dari token, bukan input
-        $validated['timestamp'] = now(); // Waktu server, bukan input user
-        $validated['sync_status'] = 'pending_sync'; // Force status awal
+        $validated['user_id'] = $request->user()->user_id;
+        $validated['timestamp'] = now();
+        $validated['sync_status'] = 'pending_sync';
 
         $report = IncidentReport::create($validated);
 
@@ -59,7 +56,6 @@ class IncidentReportController extends Controller
     {
         $report = IncidentReport::findOrFail($id);
 
-        // ✅ CEK IDOR: Hanya pemilik atau admin yang bisa hapus
         if ($report->user_id !== $request->user()->user_id && $request->user()->role !== 'administrator_sistem') {
             return response()->json([
                 'success' => false,

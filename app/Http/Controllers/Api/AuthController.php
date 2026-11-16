@@ -20,10 +20,8 @@ class AuthController extends Controller
             ]);
         }
 
-        // Hapus token lama agar tidak menumpuk
         $user->tokens()->delete();
 
-        // Buat token baru
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([

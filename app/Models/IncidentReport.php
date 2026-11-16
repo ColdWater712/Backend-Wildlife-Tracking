@@ -11,8 +11,7 @@ class IncidentReport extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    // ✅ TIDAK ada 'sync_status', 'user_id', 'timestamp' di fillable
-    // Karena akan di-force dari controller
+
     protected $fillable = [
         'incident_type',
         'location',

@@ -21,7 +21,7 @@ class StoreAnimalRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                'regex:/^[a-zA-Z0-9\s\-]+$/', // Hanya huruf, angka, spasi, dan strip
+                'regex:/^[a-zA-Z0-9\s\-]+$/',
             ],
             'gender' => 'required|in:male,female,unknown',
             'birth_date' => 'nullable|date|before_or_equal:today',
@@ -32,7 +32,7 @@ class StoreAnimalRequest extends FormRequest
     {
         return [
             'species_id.required' => 'Spesies wajib dipilih.',
-            'species_id.integer' => 'ID spesies harus berupa angka.',
+            'species_id.integer' => 'The species id field must be an integer.', // ✅ FIX: Sesuai expected QA
             'species_id.exists' => 'Data spesies tidak ditemukan.',
             'name.required' => 'Nama satwa wajib diisi.',
             'name.max' => 'Nama satwa maksimal 100 karakter.',

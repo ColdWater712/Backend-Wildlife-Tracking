@@ -6,7 +6,7 @@ class WeatherData extends Model
 {
     protected $table = 'weather_data';
     protected $primaryKey = 'weather_id';
-    public $timestamps = false; // Pakai 'observed_at' manual
+    public $timestamps = false; 
 
     protected $fillable = [
         'reading_id', 'latitude', 'longitude', 'observed_at', 

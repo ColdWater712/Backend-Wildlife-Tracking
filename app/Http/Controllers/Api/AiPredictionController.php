@@ -27,7 +27,6 @@ class AiPredictionController extends Controller
 
         $prediction = AiPrediction::findOrFail($id);
 
-        // ✅ Force verified_by dari token
         $prediction->update([
             'verification_status' => $request->verification_status,
             'verified_species_id' => $request->verified_species_id,

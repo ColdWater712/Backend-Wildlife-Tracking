@@ -6,7 +6,7 @@ class Role extends Model
 {
     protected $table = 'roles';
     protected $primaryKey = 'role_id';
-    const UPDATED_AT = null; // Hanya ada created_at
+    const UPDATED_AT = null; 
 
     protected $fillable = ['role_name', 'description'];
     protected $casts = ['created_at' => 'datetime'];

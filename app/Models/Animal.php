@@ -11,7 +11,6 @@ class Animal extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    // ✅ HANYA field yang BOLEH diisi user
     protected $fillable = [
         'species_id',
         'name',

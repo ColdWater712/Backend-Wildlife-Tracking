@@ -11,7 +11,6 @@ class AiPrediction extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    // ✅ 'verified_by' TIDAK di fillable (akan di-force dari controller)
     protected $fillable = [
         'media_id',
         'predicted_species_id',

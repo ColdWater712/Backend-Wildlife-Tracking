@@ -10,7 +10,6 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
-        // ✅ Hanya tampilkan notifikasi user yang login
         $notifications = Notification::where('user_id', $request->user()->user_id)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -25,7 +24,6 @@ class NotificationController extends Controller
     {
         $notification = Notification::findOrFail($id);
 
-        // ✅ CEK IDOR: Hanya pemilik yang bisa tandai dibaca
         if ($notification->user_id !== $request->user()->user_id) {
             return response()->json([
                 'success' => false,

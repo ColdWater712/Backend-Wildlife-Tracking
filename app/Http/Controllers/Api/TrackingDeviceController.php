@@ -8,9 +8,27 @@ use Illuminate\Http\Request;
 
 class TrackingDeviceController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $devices = TrackingDevice::with(['animal.species'])->get();
+        $query = TrackingDevice::with(['animal.species']);
+
+        if ($request->has('device_condition') && $request->device_condition !== 'all') {
+            $query->where('device_condition', $request->device_condition);
+        }
+
+        if ($request->has('is_active')) {
+            $isActive = filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN);
+            $query->where('is_active', $isActive);
+        }
+
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->whereHas('animal', function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%');
+            });
+        }
+
+        $devices = $query->get();
 
         return response()->json([
             'success' => true,

@@ -11,7 +11,6 @@ class GeoZone extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    // ✅ 'created_by' TIDAK di fillable (akan di-force dari controller)
     protected $fillable = [
         'zone_name',
         'zone_type',

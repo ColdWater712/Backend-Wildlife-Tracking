@@ -23,7 +23,6 @@ class GeoZoneController extends Controller
     {
         $validated = $request->validated();
 
-        // ✅ Force created_by dari token
         $validated['created_by'] = $request->user()->user_id;
 
         $zone = GeoZone::create($validated);
