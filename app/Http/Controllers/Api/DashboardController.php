@@ -21,7 +21,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $stats
+            'data' => $stats,
         ], 200);
     }
 }

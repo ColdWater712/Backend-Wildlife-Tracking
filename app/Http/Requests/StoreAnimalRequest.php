@@ -16,8 +16,13 @@ class StoreAnimalRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'species_id' => 'required|exists:species,species_id',
-            'name' => 'required|string|max:100',
+            'species_id' => 'required|integer|exists:species,species_id',
+            'name' => [
+                'required',
+                'string',
+                'max:100',
+                'regex:/^[a-zA-Z0-9\s\-]+$/', // Hanya huruf, angka, spasi, dan strip
+            ],
             'gender' => 'required|in:male,female,unknown',
             'birth_date' => 'nullable|date|before_or_equal:today',
         ];
@@ -27,9 +32,11 @@ class StoreAnimalRequest extends FormRequest
     {
         return [
             'species_id.required' => 'Spesies wajib dipilih.',
+            'species_id.integer' => 'ID spesies harus berupa angka.',
             'species_id.exists' => 'Data spesies tidak ditemukan.',
             'name.required' => 'Nama satwa wajib diisi.',
             'name.max' => 'Nama satwa maksimal 100 karakter.',
+            'name.regex' => 'Nama hanya boleh berisi huruf, angka, spasi, dan strip.',
             'gender.required' => 'Jenis kelamin wajib dipilih.',
             'gender.in' => 'Jenis kelamin harus: male, female, atau unknown.',
             'birth_date.date' => 'Format tanggal lahir tidak valid (YYYY-MM-DD).',

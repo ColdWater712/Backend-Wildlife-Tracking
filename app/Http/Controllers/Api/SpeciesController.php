@@ -3,31 +3,39 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreSpeciesRequest;
 use App\Models\Species;
 
 class SpeciesController extends Controller
 {
     public function index()
     {
-        $species = Species::all();
+        $species = Species::with('animals')->get();
+
         return response()->json([
             'success' => true,
-            'data' => $species
+            'data' => $species,
         ], 200);
+    }
+
+    public function store(StoreSpeciesRequest $request)
+    {
+        $species = Species::create($request->validated());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Spesies berhasil ditambahkan',
+            'data' => $species,
+        ], 201);
     }
 
     public function show($id)
     {
-        // Mencari berdasarkan species_id (bukan id)
-        $species = Species::with('animals')->find($id);
-        
-        if (!$species) {
-            return response()->json(['message' => 'Spesies tidak ditemukan'], 404);
-        }
+        $species = Species::with('animals')->findOrFail($id);
 
         return response()->json([
             'success' => true,
-            'data' => $species
+            'data' => $species,
         ], 200);
     }
 }

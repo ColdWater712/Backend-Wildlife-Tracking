@@ -8,10 +8,16 @@ class Animal extends Model
 {
     protected $table = 'animals';
     protected $primaryKey = 'animal_id';
-    public $incrementing = true;  // ← TAMBAHKAN BARIS INI
+    public $incrementing = true;
     public $timestamps = false;
 
-    protected $fillable = ['species_id', 'name', 'birth_date', 'gender', 'is_active'];
+    // ✅ HANYA field yang BOLEH diisi user
+    protected $fillable = [
+        'species_id',
+        'name',
+        'birth_date',
+        'gender',
+    ];
 
     protected function casts(): array
     {

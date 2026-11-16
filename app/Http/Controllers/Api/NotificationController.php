@@ -10,35 +10,35 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
-        // Ambil notifikasi khusus untuk user yang login, urutkan dari terbaru
+        // ✅ Hanya tampilkan notifikasi user yang login
         $notifications = Notification::where('user_id', $request->user()->user_id)
             ->orderBy('created_at', 'desc')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $notifications
+            'data' => $notifications,
         ], 200);
     }
 
-    public function markAsRead($id)
+    public function markAsRead(Request $request, $id)
     {
-        // Cari notifikasi berdasarkan notif_id
-        $notif = Notification::where('notif_id', $id)
-            ->where('user_id', auth()->user()->user_id)
-            ->first();
+        $notification = Notification::findOrFail($id);
 
-        if (!$notif) {
-            return response()->json(['message' => 'Notifikasi tidak ditemukan'], 404);
+        // ✅ CEK IDOR: Hanya pemilik yang bisa tandai dibaca
+        if ($notification->user_id !== $request->user()->user_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke notifikasi ini.',
+            ], 403);
         }
 
-        $notif->is_read = true;
-        $notif->save();
+        $notification->update(['is_read' => true]);
 
         return response()->json([
             'success' => true,
             'message' => 'Notifikasi ditandai sudah dibaca',
-            'data' => $notif
+            'data' => $notification,
         ], 200);
     }
 }

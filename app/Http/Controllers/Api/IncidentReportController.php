@@ -5,35 +5,73 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreIncidentReportRequest;
 use App\Models\IncidentReport;
+use Illuminate\Http\Request;
 
 class IncidentReportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $reports = IncidentReport::with('reporter')
-            ->orderBy('timestamp', 'desc')
-            ->get();
+        $query = IncidentReport::with('reporter');
+
+        // Filter by user (kecuali admin bisa lihat semua)
+        if ($request->user()->role !== 'administrator_sistem') {
+            $query->where('user_id', $request->user()->user_id);
+        }
+
+        $reports = $query->orderBy('timestamp', 'desc')->get();
 
         return response()->json([
             'success' => true,
-            'data' => $reports
+            'data' => $reports,
         ], 200);
     }
 
     public function store(StoreIncidentReportRequest $request)
     {
-        $data = $request->validated();
-        
-        if (!isset($data['timestamp'])) {
-            $data['timestamp'] = now();
-        }
+        // ✅ HANYA ambil data yang sudah divalidasi
+        $validated = $request->validated();
 
-        $report = IncidentReport::create($data);
+        // ✅ Force nilai yang TIDAK BOLEH dimanipulasi user
+        $validated['user_id'] = $request->user()->user_id; // Dari token, bukan input
+        $validated['timestamp'] = now(); // Waktu server, bukan input user
+        $validated['sync_status'] = 'pending_sync'; // Force status awal
+
+        $report = IncidentReport::create($validated);
 
         return response()->json([
             'success' => true,
             'message' => 'Laporan insiden berhasil dibuat',
-            'data' => $report
+            'data' => $report,
         ], 201);
+    }
+
+    public function show($id)
+    {
+        $report = IncidentReport::with('reporter')->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $report,
+        ], 200);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $report = IncidentReport::findOrFail($id);
+
+        // ✅ CEK IDOR: Hanya pemilik atau admin yang bisa hapus
+        if ($report->user_id !== $request->user()->user_id && $request->user()->role !== 'administrator_sistem') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses untuk menghapus laporan ini.',
+            ], 403);
+        }
+
+        $report->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Laporan berhasil dihapus',
+        ], 200);
     }
 }

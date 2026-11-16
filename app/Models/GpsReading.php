@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -7,11 +8,17 @@ class GpsReading extends Model
 {
     protected $table = 'gps_readings';
     protected $primaryKey = 'reading_id';
+    public $incrementing = true;
     public $timestamps = false;
 
     protected $fillable = [
-        'device_id', 'latitude', 'longitude', 'recorded_at', 
-        'altitude_meters', 'accuracy_meters', 'checksum'
+        'device_id',
+        'latitude',
+        'longitude',
+        'recorded_at',
+        'altitude_meters',
+        'accuracy_meters',
+        'checksum',
     ];
 
     protected function casts(): array

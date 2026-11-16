@@ -1,18 +1,36 @@
 <?php
+
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Model;
 
 class Notification extends Model
 {
     protected $table = 'notifications';
     protected $primaryKey = 'notif_id';
-    const UPDATED_AT = null;
+    public $incrementing = true;
+    public $timestamps = false;
 
+    // ✅ 'user_id' TIDAK di fillable (akan di-force dari sistem)
     protected $fillable = [
-        'user_id', 'notification_type', 'message', 
-        'animal_id', 'zone_id', 'device_id', 'is_read'
+        'notification_type',
+        'message',
+        'animal_id',
+        'zone_id',
+        'device_id',
+        'is_read',
     ];
-    protected $casts = ['is_read' => 'boolean', 'created_at' => 'datetime'];
 
-    public function user() { return $this->belongsTo(User::class, 'user_id', 'user_id'); }
+    protected function casts(): array
+    {
+        return [
+            'is_read' => 'boolean',
+            'created_at' => 'datetime',
+        ];
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
 }

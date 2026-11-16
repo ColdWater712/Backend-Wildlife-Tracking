@@ -3,44 +3,48 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreGpsReadingRequest;
 use App\Models\GpsReading;
 use Illuminate\Http\Request;
 
 class GpsReadingController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // Ambil 100 data terakhir, urutkan dari yang terbaru
-        $readings = GpsReading::with('device.animal')
-            ->orderBy('recorded_at', 'desc')
-            ->limit(100)
-            ->get();
-            
+        $query = GpsReading::with(['device.animal.species']);
+
+        // Filter by device_id jika ada
+        if ($request->has('device_id')) {
+            $query->where('device_id', $request->device_id);
+        }
+
+        $readings = $query->orderBy('recorded_at', 'desc')->limit(100)->get();
+
         return response()->json([
-            'success' => true, 
-            'data' => $readings
+            'success' => true,
+            'data' => $readings,
         ], 200);
     }
 
-    public function store(Request $request)
+    public function store(StoreGpsReadingRequest $request)
     {
-        $request->validate([
-            'device_id' => 'required|exists:tracking_devices,device_id',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-            'recorded_at' => 'required|date_format:Y-m-d H:i:s',
-            'altitude_meters' => 'nullable|numeric',
-            'accuracy_meters' => 'nullable|numeric',
-        ]);
+        $validated = $request->validated();
 
-        // Insert data GPS
-        // Trigger database akan otomatis berjalan di belakang layar
-        $reading = GpsReading::create($request->all());
+        // ✅ Force checksum dari data yang divalidasi (bukan dari input user)
+        $payload = json_encode([
+            'device_id' => $validated['device_id'],
+            'latitude' => $validated['latitude'],
+            'longitude' => $validated['longitude'],
+            'recorded_at' => $validated['recorded_at'],
+        ]);
+        $validated['checksum'] = hash('sha256', $payload);
+
+        $reading = GpsReading::create($validated);
 
         return response()->json([
-            'success' => true, 
-            'message' => 'Data GPS tersimpan & Trigger database dijalankan.', 
-            'data' => $reading
+            'success' => true,
+            'message' => 'Data GPS tersimpan & Trigger database dijalankan.',
+            'data' => $reading,
         ], 201);
     }
 }

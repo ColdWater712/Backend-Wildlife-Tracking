@@ -1,19 +1,35 @@
 <?php
+
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Model;
 
 class IncidentReport extends Model
 {
     protected $table = 'incident_reports';
     protected $primaryKey = 'report_id';
-    const CREATED_AT = 'timestamp'; // Map ke kolom 'timestamp' di SQL
-    const UPDATED_AT = null;
+    public $incrementing = true;
+    public $timestamps = false;
 
+    // ✅ TIDAK ada 'sync_status', 'user_id', 'timestamp' di fillable
+    // Karena akan di-force dari controller
     protected $fillable = [
-        'user_id', 'incident_type', 'animal_code', 'location', 
-        'description', 'photo_url', 'sync_status'
+        'incident_type',
+        'location',
+        'description',
+        'animal_code',
+        'photo_url',
     ];
-    protected $casts = ['timestamp' => 'datetime'];
 
-    public function reporter() { return $this->belongsTo(User::class, 'user_id', 'user_id'); }
+    protected function casts(): array
+    {
+        return [
+            'timestamp' => 'datetime',
+        ];
+    }
+
+    public function reporter()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
 }

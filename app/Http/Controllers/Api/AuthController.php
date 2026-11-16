@@ -20,16 +20,24 @@ class AuthController extends Controller
             ]);
         }
 
+        // Hapus token lama agar tidak menumpuk
         $user->tokens()->delete();
+
+        // Buat token baru
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'success' => true,
             'message' => 'Login berhasil.',
             'data' => [
-                'user' => $user,
-                'token' => $token
-            ]
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
+                'token' => $token,
+            ],
         ], 200);
     }
 
@@ -39,7 +47,7 @@ class AuthController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Logout berhasil.'
+            'message' => 'Logout berhasil.',
         ], 200);
     }
 }
