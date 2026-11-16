@@ -6,19 +6,42 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     public function login(LoginRequest $request)
     {
+        $throttleKey = strtolower($request->input('email')) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $seconds = RateLimiter::availableIn($throttleKey);
+
+            return response()->json([
+                'success' => false,
+                'message' => "Terlalu banyak percobaan login. Silakan coba lagi dalam {$seconds} detik.",
+            ], 429);
+        }
+
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Kredensial yang diberikan tidak sesuai.'],
-            ]);
+        $passwordValid = $user && Hash::check($request->password, $user->password);
+
+        if (!$user || !$passwordValid) {
+            RateLimiter::hit($throttleKey, 60);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Email atau password salah.',
+                'errors' => [
+                    'credentials' => ['Email atau password salah.'],
+                ],
+            ], 401);
         }
+
+        RateLimiter::clear($throttleKey);
 
         $user->tokens()->delete();
 
@@ -39,7 +62,7 @@ class AuthController extends Controller
         ], 200);
     }
 
-    public function logout(\Illuminate\Http\Request $request)
+    public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
 
