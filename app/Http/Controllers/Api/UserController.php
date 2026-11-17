@@ -97,6 +97,27 @@ class UserController extends Controller
         return $this->success(null, 'User berhasil dihapus (soft delete)');
     }
 
+        public function updateStatus(Request $request, $id)
+    {
+        $request->validate(['status' => 'required|in:aktif,nonaktif,suspend']);
+
+        $user = \App\Models\User::findOrFail($id);
+        if ($user->user_id === $request->user()->user_id && $request->status !== 'aktif') {
+            return $this->error('Tidak dapat menonaktifkan akun sendiri', 422);
+        }
+
+        $user->update(['status' => $request->status]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id,
+            'action' => 'UPDATE_USER_STATUS',
+            'details' => json_encode(['user_id' => $user->user_id, 'status' => $request->status]),
+            'timestamp' => now(),
+        ]);
+
+        return $this->success($this->presentUser($user->fresh()), 'Status user diperbarui');
+    }
+    
     public function updateProfile(Request $request)
     {
         $user = $request->user();

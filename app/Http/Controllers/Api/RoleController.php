@@ -8,10 +8,11 @@ use App\Http\Requests\UpdateRoleRequest;
 use App\Http\Traits\ApiResponse;
 use App\Models\Role;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class RoleController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse; // ✅ WAJIB ADA
 
     public function index(Request $request)
     {
@@ -21,7 +22,8 @@ class RoleController extends Controller
             $query->where('role_name', 'like', '%' . $request->search . '%');
         }
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        // ✅ Gunakan $this->list() agar return array sesuai kebutuhan test & frontend
+        return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
@@ -55,7 +57,7 @@ class RoleController extends Controller
     public function getPermissions($id)
     {
         $role = Role::with('permissions')->findOrFail($id);
-        return $this->success($role->permissions);
+        return $this->list($role->permissions);
     }
 
     public function syncPermissions(Request $request, $id)
@@ -65,7 +67,17 @@ class RoleController extends Controller
             'permission_ids' => 'required|array',
             'permission_ids.*' => 'integer|exists:permissions,permission_id',
         ]);
-        $role->permissions()->sync($request->permission_ids);
+
+        DB::transaction(function () use ($role, $request) {
+            $role->permissions()->sync($request->permission_ids);
+            \App\Models\ActivityLog::create([
+                'user_id' => $request->user()->user_id,
+                'action' => 'SYNC_ROLE_PERMISSIONS',
+                'details' => json_encode(['role_id' => $role->role_id, 'permissions' => $request->permission_ids]),
+                'timestamp' => now(),
+            ]);
+        });
+
         return $this->success($role->fresh()->load('permissions'), 'Permissions disinkronkan');
     }
 

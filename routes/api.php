@@ -20,42 +20,47 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WeatherDataController;
 use Illuminate\Support\Facades\Route;
 
-// Public Routes
+// ==========================================
+// PUBLIC ROUTES
+// ==========================================
 Route::post('/login', [AuthController::class, 'login']);
 
-// Protected Routes
+// ==========================================
+// PROTECTED ROUTES
+// ==========================================
 Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(function () {
 
-    // Auth
+    // --- Auth & Profile ---
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/auth/refresh', [AuthController::class, 'refresh']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [UserController::class, 'updateProfile']);
     Route::put('/me/password', [UserController::class, 'changePassword']);
 
-    // Dashboard
+    // --- Dashboard ---
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
-    // Users
+    // --- Users ---
+    Route::get('users', [UserController::class, 'index']);
+    Route::get('users/{id}', [UserController::class, 'show']);
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::apiResource('users', UserController::class)->except('index', 'show');
+        Route::patch('users/{id}/status', [UserController::class, 'updateStatus']); // ✅ G-4: Dipindah ke dalam grup admin
         Route::get('users/{id}/tokens', [UserController::class, 'getUserTokens']);
         Route::delete('users/{id}/tokens/{tokenId}', [UserController::class, 'revokeUserToken']);
     });
-    Route::get('users', [UserController::class, 'index']);
-    Route::get('users/{id}', [UserController::class, 'show']);
 
-    // Roles & Permissions
+    // --- Roles & Permissions ---
     Route::middleware('role:administrator_sistem')->group(function () {
+        Route::apiResource('roles', RoleController::class);
+        Route::apiResource('permissions', PermissionController::class);
         Route::get('roles/{id}/permissions', [RoleController::class, 'getPermissions']);
         Route::put('roles/{id}/permissions', [RoleController::class, 'syncPermissions']);
         Route::post('roles/{id}/permissions/{permissionId}', [RoleController::class, 'assignPermission']);
         Route::delete('roles/{id}/permissions/{permissionId}', [RoleController::class, 'revokePermission']);
-        Route::apiResource('roles', RoleController::class);
-        Route::apiResource('permissions', PermissionController::class);
     });
 
-    // Species
+    // --- Species ---
     Route::get('species', [SpeciesController::class, 'index']);
     Route::get('species/{id}', [SpeciesController::class, 'show']);
     Route::middleware('role:administrator_sistem')->group(function () {
@@ -64,7 +69,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('species/{id}', [SpeciesController::class, 'destroy']);
     });
 
-    // Animals
+    // --- Animals ---
     Route::get('animals', [AnimalController::class, 'index']);
     Route::get('animals/{id}', [AnimalController::class, 'show']);
     Route::get('animals/{animalId}/track', [GpsReadingController::class, 'byAnimal']);
@@ -76,7 +81,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('animals/{id}', [AnimalController::class, 'destroy']);
     });
 
-    // Tracking Devices
+    // --- Tracking Devices ---
     Route::get('devices', [TrackingDeviceController::class, 'index']);
     Route::get('devices/{id}', [TrackingDeviceController::class, 'show']);
     Route::get('devices/{id}/latest-reading', [TrackingDeviceController::class, 'latestReading']);
@@ -91,7 +96,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('devices/{id}', [TrackingDeviceController::class, 'destroy']);
     });
 
-    // GPS Readings
+    // --- GPS Readings ---
     Route::get('gps-readings', [GpsReadingController::class, 'index']);
     Route::get('gps-readings/{id}', [GpsReadingController::class, 'show']);
     Route::get('gps-readings/{readingId}/weather', [WeatherDataController::class, 'byReading']);
@@ -102,7 +107,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('gps-readings/{id}', [GpsReadingController::class, 'destroy']);
     });
 
-    // Geo Zones
+    // --- Geo Zones ---
     Route::get('geo-zones', [GeoZoneController::class, 'index']);
     Route::get('geo-zones/{id}', [GeoZoneController::class, 'show']);
     Route::get('geo-zones/{id}/animals', [GeoZoneController::class, 'animals']);
@@ -113,7 +118,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('geo-zones/{id}', [GeoZoneController::class, 'destroy']);
     });
 
-    // Animal Geo Zone Visits
+    // --- Animal Geo Zone Visits ---
     Route::get('animal-geo-zone-visits', [AnimalGeoZoneController::class, 'index']);
     Route::get('animal-geo-zone-visits/{id}', [AnimalGeoZoneController::class, 'show']);
     Route::post('animal-geo-zone-visits', [AnimalGeoZoneController::class, 'store']);
@@ -123,18 +128,19 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('animal-geo-zone-visits/{id}', [AnimalGeoZoneController::class, 'destroy']);
     });
 
-    // Incidents
+    // --- Incidents ---
     Route::get('incidents', [IncidentReportController::class, 'index']);
     Route::get('incidents/{id}', [IncidentReportController::class, 'show']);
     Route::get('incidents/{id}/media', [IncidentReportController::class, 'media']);
     Route::middleware('role:konservasionis_lapangan,peneliti_ekologi,administrator_sistem')->group(function () {
         Route::post('incidents', [IncidentReportController::class, 'store']);
+        Route::post('incidents/{id}/media', [IncidentReportController::class, 'uploadMedia']); // ✅ G-1: Dipindah ke dalam grup yang tepat
         Route::put('incidents/{id}', [IncidentReportController::class, 'update']);
         Route::patch('incidents/{id}/sync-status', [IncidentReportController::class, 'updateSyncStatus']);
         Route::delete('incidents/{id}', [IncidentReportController::class, 'destroy']);
     });
 
-    // Notifications
+    // --- Notifications ---
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::get('notifications/{id}', [NotificationController::class, 'show']);
     Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
@@ -142,7 +148,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
     Route::delete('notifications', [NotificationController::class, 'deleteRead']);
 
-    // Weather Data
+    // --- Weather Data ---
     Route::get('weather-data', [WeatherDataController::class, 'index']);
     Route::get('weather-data/{id}', [WeatherDataController::class, 'show']);
     Route::post('weather-data/ingest', [WeatherDataController::class, 'ingest']);
@@ -152,7 +158,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('weather-data/{id}', [WeatherDataController::class, 'destroy']);
     });
 
-    // Aggregate Reports
+    // --- Aggregate Reports ---
     Route::get('aggregate-reports', [AggregateReportController::class, 'index']);
     Route::get('aggregate-reports/{id}', [AggregateReportController::class, 'show']);
     Route::get('aggregate-reports/{id}/download', [AggregateReportController::class, 'download']);
@@ -163,7 +169,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('aggregate-reports/{id}', [AggregateReportController::class, 'destroy']);
     });
 
-    // Activity Log
+    // --- Activity Log ---
     Route::get('activity-logs', [ActivityLogController::class, 'index']);
     Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
     Route::middleware('role:administrator_sistem')->group(function () {
@@ -172,7 +178,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('activity-logs/{id}', [ActivityLogController::class, 'destroy']);
     });
 
-    // AI
+    // --- AI Predictions & Media ---
     Route::get('ai-predictions', [AiPredictionController::class, 'index']);
     Route::get('ai-predictions/pending-verification', [AiPredictionController::class, 'pendingVerification']);
     Route::get('ai-predictions/{id}', [AiPredictionController::class, 'show']);
@@ -190,7 +196,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('media-uploads/{id}', [AiPredictionController::class, 'destroyMedia']);
     });
 
-    // Export
+    // --- Export ---
     Route::get('export/gps/csv', [ExportController::class, 'exportGpsCsv']);
     Route::get('export/gps/geojson', [ExportController::class, 'exportGpsGeoJson']);
     Route::get('export/animals/csv', [ExportController::class, 'exportAnimalsCsv']);

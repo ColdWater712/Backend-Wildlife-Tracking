@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 
 class PermissionController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse; // ✅ Pastikan trait ini ada
 
     public function index(Request $request)
     {
@@ -20,7 +20,8 @@ class PermissionController extends Controller
             $query->where('permission_name', 'like', '%' . $request->search . '%');
         }
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        // ✅ Gunakan $this->list() agar return array sesuai kebutuhan test & frontend
+        return $this->list($query, 'OK', $request);
     }
 
     public function show($id)

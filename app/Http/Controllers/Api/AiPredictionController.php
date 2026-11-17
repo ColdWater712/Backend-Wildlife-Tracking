@@ -79,28 +79,36 @@ class AiPredictionController extends Controller
         }
     }
 
-    public function verify(Request $request, $id)
-    {
-        $request->validate([
-            'verification_status' => 'required|in:confirmed,rejected',
-            'verified_species_id' => 'required|integer|exists:species,species_id',
-        ]);
+public function verify(Request $request, $id)
+{
+    $request->validate([
+        'verification_status' => 'required|in:confirmed,rejected',
+        'verified_species_id' => 'required|integer|exists:species,species_id',
+    ]);
 
-        $prediction = AiPrediction::findOrFail($id);
+    $prediction = AiPrediction::findOrFail($id);
+
+    // ✅ G-2: transaction verifikasi + audit
+    DB::transaction(function () use ($prediction, $request) {
         $prediction->update([
             'verification_status' => $request->verification_status,
             'verified_species_id' => $request->verified_species_id,
             'verified_by' => $request->user()->user_id,
             'verified_at' => now(),
         ]);
-
         \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'VERIFY_AI_PREDICTION',
-            'details' => json_encode(['prediction_id' => $id, 'status' => $request->verification_status]), 'timestamp' => now(),
+            'user_id' => $request->user()->user_id,
+            'action' => 'VERIFY_AI_PREDICTION',
+            'details' => json_encode([
+                'prediction_id' => $prediction->prediction_id,
+                'status' => $request->verification_status,
+            ]),
+            'timestamp' => now(),
         ]);
+    });
 
-        return $this->success($prediction->fresh(['verifiedSpecies', 'verifier']), 'Prediksi AI berhasil diverifikasi.');
-    }
+    return $this->success($prediction->fresh(['verifiedSpecies', 'verifier']), 'Prediksi AI berhasil diverifikasi.');
+}
 
     public function retry($id)
     {

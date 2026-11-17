@@ -68,23 +68,27 @@ class TrackingDeviceController extends Controller
         return $this->success($device->fresh()->load('animal'), 'Perangkat diperbarui');
     }
 
-    public function assignAnimal(Request $request, $id)
-    {
-        $request->validate(['animal_id' => 'required|integer|exists:animals,animal_id']);
-        $device = TrackingDevice::findOrFail($id);
+public function assignAnimal(Request $request, $id)
+{
+    $request->validate(['animal_id' => 'required|integer|exists:animals,animal_id']);
+    $device = TrackingDevice::findOrFail($id);
 
-        $existing = TrackingDevice::where('animal_id', $request->animal_id)->where('device_id', '!=', $id)->first();
-        if ($existing) return $this->error('Satwa ini sudah memiliki perangkat lain', 422);
+    $existing = TrackingDevice::where('animal_id', $request->animal_id)->where('device_id', '!=', $id)->first();
+    if ($existing) return $this->error('Satwa ini sudah memiliki perangkat lain', 422);
 
+    // ✅ G-2: transaction update device + audit
+    DB::transaction(function () use ($device, $request) {
         $device->update(['animal_id' => $request->animal_id]);
-
         \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'ASSIGN_DEVICE',
-            'details' => json_encode(['device_id' => $id, 'animal_id' => $request->animal_id]), 'timestamp' => now(),
+            'user_id' => $request->user()->user_id,
+            'action' => 'ASSIGN_DEVICE',
+            'details' => json_encode(['device_id' => $device->device_id, 'animal_id' => $request->animal_id]),
+            'timestamp' => now(),
         ]);
+    });
 
-        return $this->success($device->fresh()->load('animal'), 'Perangkat dipasangkan ke satwa');
-    }
+    return $this->success($device->fresh()->load('animal'), 'Perangkat dipasangkan ke satwa');
+}
 
     public function unassignAnimal($id)
     {
