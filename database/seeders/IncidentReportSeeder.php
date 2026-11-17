@@ -1,16 +1,39 @@
 <?php
-namespace Database\Seeders;
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
-class IncidentReportSeeder extends Seeder {
-    public function run(): void {
-        DB::table('incident_reports')->insert([
-            ['report_id' => 1, 'user_id' => 1, 'incident_type' => 'observasi', 'animal_code' => 'SATWA-742', 'location' => 'Zona Konservasi Utara', 'description' => 'Satwa terlihat sehat, bergerak normal', 'timestamp' => '2026-10-19 10:30:00', 'photo_url' => 'uploads/img_001.jpg', 'sync_status' => 'synced'],
-            ['report_id' => 2, 'user_id' => 2, 'incident_type' => 'konflik', 'animal_code' => 'SATWA-281', 'location' => 'Zona Perkebunan Tengah', 'description' => 'Satwa masuk area perkebunan warga', 'timestamp' => '2026-10-19 09:45:00', 'photo_url' => 'uploads/img_002.jpg', 'sync_status' => 'synced'],
-            ['report_id' => 3, 'user_id' => 3, 'incident_type' => 'device_alert', 'animal_code' => 'SATWA-803', 'location' => 'Zona Permukiman Selatan', 'description' => 'Perangkat GPS sinyal lemah', 'timestamp' => '2026-10-19 11:20:00', 'photo_url' => NULL, 'sync_status' => 'pending_sync'],
-            ['report_id' => 4, 'user_id' => 1, 'incident_type' => 'observasi', 'animal_code' => 'SATWA-387', 'location' => 'Zona Jalan Raya Timur', 'description' => 'Satwa melintasi jalan raya', 'timestamp' => '2026-10-18 15:30:00', 'photo_url' => 'uploads/img_003.jpg', 'sync_status' => 'synced'],
-            ['report_id' => 5, 'user_id' => 2, 'incident_type' => 'perambahan', 'animal_code' => 'SATWA-968', 'location' => 'Zona Hutan Lindung Barat', 'description' => 'Ditemukan aktivitas ilegal di zona lindung', 'timestamp' => '2026-10-15 09:00:00', 'photo_url' => 'uploads/img_004.jpg', 'sync_status' => 'failed'],
-        ]);
+namespace Database\Seeders;
+
+use App\Models\IncidentReport;
+use App\Models\User;
+use Illuminate\Database\Seeder;
+
+class IncidentReportSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $users = User::whereIn('role', ['konservasionis_lapangan', 'peneliti_ekologi', 'administrator_sistem'])->get();
+
+        $incidents = [
+            ['type' => 'observasi', 'code' => 'ORN-01', 'loc' => 'Zona Konservasi Utara', 'desc' => 'Satwa terlihat sehat, bergerak normal'],
+            ['type' => 'konflik', 'code' => 'HRM-01', 'loc' => 'Zona Perkebunan Tengah', 'desc' => 'Satwa masuk area perkebunan warga'],
+            ['type' => 'device_alert', 'code' => 'BDK-01', 'loc' => 'Zona Permukiman Selatan', 'desc' => 'Perangkat GPS sinyal lemah'],
+            ['type' => 'observasi', 'code' => 'GJS-01', 'loc' => 'Zona Jalan Raya Timur', 'desc' => 'Satwa melintasi jalan raya'],
+            ['type' => 'perambahan', 'code' => 'RSA-01', 'loc' => 'Zona Hutan Lindung Barat', 'desc' => 'Ditemukan aktivitas ilegal di zona lindung'],
+        ];
+
+        foreach ($incidents as $i => $inc) {
+            $user = $users[$i % $users->count()];
+            IncidentReport::updateOrCreate(
+                ['animal_code' => $inc['code'], 'location' => $inc['loc']],
+                [
+                    'user_id' => $user->user_id,
+                    'incident_type' => $inc['type'],
+                    'animal_code' => $inc['code'],
+                    'location' => $inc['loc'],
+                    'description' => $inc['desc'],
+                    'timestamp' => now()->subDays($i),
+                    'sync_status' => $i % 3 === 0 ? 'synced' : ($i % 3 === 1 ? 'pending_sync' : 'failed'),
+                ]
+            );
+        }
     }
 }

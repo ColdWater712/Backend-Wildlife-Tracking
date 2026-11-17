@@ -2,8 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
@@ -11,36 +12,24 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         $users = [
-            [
-                'name' => 'Admin Sistem',
-                'email' => 'admin@wildlife.id',
-                'password' => Hash::make('password123'), // Password di-hash dengan aman
-                'role' => 'administrator_sistem',
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Peneliti Ekologi',
-                'email' => 'peneliti@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role' => 'peneliti_ekologi',
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Konservasionis Lapangan',
-                'email' => 'lapangan@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role' => 'konservasionis_lapangan',
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Pengambil Kebijakan',
-                'email' => 'kebijakan@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role' => 'pengambil_kebijakan',
-                'created_at' => now(),
-            ],
+            ['name' => 'Admin Sistem', 'email' => 'admin@wildlife.id', 'role' => 'administrator_sistem'],
+            ['name' => 'Peneliti Ekologi', 'email' => 'peneliti@wildlife.id', 'role' => 'peneliti_ekologi'],
+            ['name' => 'Konservasionis Lapangan', 'email' => 'lapangan@wildlife.id', 'role' => 'konservasionis_lapangan'],
+            ['name' => 'Pengambil Kebijakan', 'email' => 'kebijakan@wildlife.id', 'role' => 'pengambil_kebijakan'],
         ];
 
-        DB::table('users')->insert($users);
+        foreach ($users as $u) {
+            $role = Role::where('role_name', $u['role'])->first();
+            User::updateOrCreate(
+                ['email' => $u['email']],
+                [
+                    'name' => $u['name'],
+                    'email' => $u['email'],
+                    'password' => Hash::make('password123'),
+                    'role' => $u['role'],
+                    'role_id' => $role?->role_id,
+                ]
+            );
+        }
     }
 }

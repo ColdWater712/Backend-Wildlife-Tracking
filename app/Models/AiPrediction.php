@@ -12,13 +12,8 @@ class AiPrediction extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'media_id',
-        'predicted_species_id',
-        'confidence',
-        'model_version',
-        'processing_status',
-        'verification_status',
-        'verified_species_id',
+        'media_id', 'predicted_species_id', 'confidence', 'model_version',
+        'processing_status', 'verification_status', 'verified_species_id',
         'verified_by',
     ];
 

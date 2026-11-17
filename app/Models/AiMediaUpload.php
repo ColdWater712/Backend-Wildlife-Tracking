@@ -11,18 +11,11 @@ class AiMediaUpload extends Model
     public $incrementing = true;
     public $timestamps = false;
 
-    protected $fillable = [
-        'uploaded_by',
-        'report_id',
-        'media_type',
-        'file_path',
-    ];
+    protected $fillable = ['uploaded_by', 'report_id', 'media_type', 'file_path'];
 
     protected function casts(): array
     {
-        return [
-            'uploaded_at' => 'datetime',
-        ];
+        return ['uploaded_at' => 'datetime'];
     }
 
     public function uploader()
@@ -35,8 +28,8 @@ class AiMediaUpload extends Model
         return $this->belongsTo(IncidentReport::class, 'report_id', 'report_id');
     }
 
-    public function prediction()
+    public function predictions()
     {
-        return $this->hasOne(AiPrediction::class, 'media_id', 'media_id');
+        return $this->hasMany(AiPrediction::class, 'media_id', 'media_id');
     }
 }

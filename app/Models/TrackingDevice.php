@@ -12,13 +12,9 @@ class TrackingDevice extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'animal_id',
-        'model',
-        'installation_date',
-        'battery_life_months',
-        'battery_level',
-        'signal_strength',
-        'device_condition',
+        'animal_id', 'model', 'installation_date', 'battery_life_months',
+        'is_active', 'device_condition', 'battery_level', 'signal_strength',
+        'last_recorded_at',
     ];
 
     protected function casts(): array
@@ -38,5 +34,16 @@ class TrackingDevice extends Model
     public function gpsReadings()
     {
         return $this->hasMany(GpsReading::class, 'device_id', 'device_id');
+    }
+
+    public function latestReading()
+    {
+        return $this->hasOne(GpsReading::class, 'device_id', 'device_id')
+            ->latestOfMany('recorded_at');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class, 'device_id', 'device_id');
     }
 }

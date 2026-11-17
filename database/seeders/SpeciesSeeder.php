@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\Species;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class SpeciesSeeder extends Seeder
 {
@@ -14,9 +14,11 @@ class SpeciesSeeder extends Seeder
             ['common_name' => 'Harimau Sumatra', 'scientific_name' => 'Panthera tigris sumatrae', 'conservation_status' => 'Critically Endangered'],
             ['common_name' => 'Badak Sumatra', 'scientific_name' => 'Dicerorhinus sumatrensis', 'conservation_status' => 'Critically Endangered'],
             ['common_name' => 'Gajah Sumatra', 'scientific_name' => 'Elephas maximus sumatranus', 'conservation_status' => 'Critically Endangered'],
-            ['common_name' => 'Beruang Madu', 'scientific_name' => 'Helarctos malayanus', 'conservation_status' => 'Vulnerable'],
+            ['common_name' => 'Rusa Sambar', 'scientific_name' => 'Rusa unicolor', 'conservation_status' => 'Vulnerable'],
         ];
 
-        DB::table('species')->insert($species);
+        foreach ($species as $sp) {
+            Species::updateOrCreate(['scientific_name' => $sp['scientific_name']], $sp);
+        }
     }
 }

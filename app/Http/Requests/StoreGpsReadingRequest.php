@@ -8,10 +8,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StoreGpsReadingRequest extends FormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
+    public function authorize(): bool { return true; }
 
     public function rules(): array
     {
@@ -20,24 +17,16 @@ class StoreGpsReadingRequest extends FormRequest
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'recorded_at' => 'required|date',
-            'altitude_meters' => 'nullable|numeric|min:0|max:8848', // Max: tinggi Everest
-            'accuracy_meters' => 'nullable|numeric|min:0|max:100',
+            'altitude_meters' => 'nullable|numeric|min:0|max:9000',
+            'accuracy_meters' => 'nullable|numeric|min:0|max:1000',
         ];
     }
 
     public function messages(): array
     {
         return [
-            'device_id.required' => 'Device ID wajib diisi.',
-            'device_id.exists' => 'Perangkat tidak ditemukan.',
-            'latitude.required' => 'Latitude wajib diisi.',
             'latitude.between' => 'Latitude harus antara -90 dan 90.',
-            'longitude.required' => 'Longitude wajib diisi.',
             'longitude.between' => 'Longitude harus antara -180 dan 180.',
-            'recorded_at.required' => 'Waktu pencatatan wajib diisi.',
-            'recorded_at.date' => 'Format waktu tidak valid.',
-            'altitude_meters.max' => 'Altitude tidak boleh lebih dari 8848 meter.',
-            'accuracy_meters.max' => 'Akurasi tidak boleh lebih dari 100 meter.',
         ];
     }
 
@@ -46,6 +35,7 @@ class StoreGpsReadingRequest extends FormRequest
         throw new HttpResponseException(response()->json([
             'success' => false,
             'message' => $validator->errors()->first(),
+            'data' => null,
             'errors' => $validator->errors(),
         ], 422));
     }
