@@ -9,14 +9,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // 1. Tambah kolom jika belum ada (Aman di MySQL & SQLite)
+        // Tambah kolom role_id (nullable dulu)
         if (!Schema::hasColumn('users', 'role_id')) {
             Schema::table('users', function (Blueprint $table) {
                 $table->unsignedBigInteger('role_id')->nullable()->after('role');
             });
         }
 
-        // 2. Migrasi data (hanya update yang masih null)
+        // Migrasi data: mapping enum role ke role_id
         $roleMapping = [
             'konservasionis_lapangan' => 1,
             'peneliti_ekologi' => 2,
@@ -31,17 +31,15 @@ return new class extends Migration
                 ->update(['role_id' => $roleId]);
         }
 
-        // 3. Tambah foreign key dengan aman (Idempoten)
-        // Coba drop dulu jika sudah ada (untuk mencegah error duplicate)
+        // Tambah foreign key
         try {
             Schema::table('users', function (Blueprint $table) {
                 $table->dropForeign(['role_id']);
             });
         } catch (\Exception $e) {
-            // Abaikan jika foreign key memang belum ada
+            // Abaikan jika foreign key belum ada
         }
 
-        // Buat foreign key baru
         Schema::table('users', function (Blueprint $table) {
             $table->foreign('role_id')
                   ->references('role_id')

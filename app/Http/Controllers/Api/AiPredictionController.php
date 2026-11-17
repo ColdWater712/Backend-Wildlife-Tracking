@@ -71,6 +71,15 @@ class AiPredictionController extends Controller
 
         try {
             $prediction = $this->aiService->processImage($media);
+
+            // Log aktivitas
+            \App\Models\ActivityLog::create([
+                'user_id' => $request->user()->user_id,
+                'action' => 'UPLOAD_AI_MEDIA',
+                'details' => json_encode(['media_id' => $media->media_id, 'prediction_id' => $prediction->prediction_id]),
+                'timestamp' => now(),
+            ]);
+
             return $this->success([
                 'media' => $media,
                 'prediction' => $prediction->load(['predictedSpecies']),
@@ -97,7 +106,22 @@ class AiPredictionController extends Controller
             'verified_at' => now(),
         ]);
 
-        return $this->success($prediction->fresh(['verifiedSpecies', 'verifier']), 'Prediksi AI berhasil diverifikasi.');
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id,
+            'action' => 'VERIFY_AI_PREDICTION',
+            'details' => json_encode([
+                'prediction_id' => $id,
+                'status' => $request->verification_status,
+                'species_id' => $request->verified_species_id,
+            ]),
+            'timestamp' => now(),
+        ]);
+
+        return $this->success(
+            $prediction->fresh(['verifiedSpecies', 'verifier']),
+            'Prediksi AI berhasil diverifikasi.'
+        );
     }
 
     public function retry($id)
@@ -107,6 +131,14 @@ class AiPredictionController extends Controller
 
         try {
             $newPrediction = $this->aiService->processImage($media);
+
+            \App\Models\ActivityLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'RETRY_AI_PREDICTION',
+                'details' => json_encode(['prediction_id' => $id, 'new_prediction_id' => $newPrediction->prediction_id]),
+                'timestamp' => now(),
+            ]);
+
             return $this->success($newPrediction->load(['predictedSpecies']), 'Prediksi diulang', 201);
         } catch (\Exception $e) {
             return $this->error('Gagal mengulang prediksi: ' . $e->getMessage(), 500);
@@ -127,6 +159,14 @@ class AiPredictionController extends Controller
     public function destroy($id)
     {
         AiPrediction::findOrFail($id)->delete();
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE_AI_PREDICTION',
+            'details' => json_encode(['prediction_id' => $id]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success(null, 'Prediksi dihapus');
     }
 
@@ -170,6 +210,43 @@ class AiPredictionController extends Controller
             Storage::disk('public')->delete($media->file_path);
         }
         $media->delete();
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE_AI_MEDIA',
+            'details' => json_encode(['media_id' => $id]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success(null, 'Media dihapus');
+    }
+
+    // ✅ Endpoint baru: Trigger prediction untuk media
+    public function triggerPrediction($mediaId)
+    {
+        $media = AiMediaUpload::findOrFail($mediaId);
+
+        try {
+            $prediction = $this->aiService->processImage($media);
+
+            \App\Models\ActivityLog::create([
+                'user_id' => auth()->id(),
+                'action' => 'TRIGGER_AI_PREDICTION',
+                'details' => json_encode(['media_id' => $mediaId, 'prediction_id' => $prediction->prediction_id]),
+                'timestamp' => now(),
+            ]);
+
+            return $this->success($prediction->load(['predictedSpecies']), 'Prediksi AI berhasil diproses', 201);
+        } catch (\Exception $e) {
+            return $this->error('Gagal memproses prediksi: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // ✅ Endpoint baru: Get predictions untuk media tertentu
+    public function getMediaPredictions($mediaId)
+    {
+        $media = AiMediaUpload::findOrFail($mediaId);
+        $predictions = $media->predictions()->with(['predictedSpecies', 'verifiedSpecies', 'verifier'])->get();
+        return $this->success($predictions);
     }
 }

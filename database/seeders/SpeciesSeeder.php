@@ -18,7 +18,10 @@ class SpeciesSeeder extends Seeder
         ];
 
         foreach ($species as $sp) {
-            Species::updateOrCreate(['scientific_name' => $sp['scientific_name']], $sp);
+            Species::updateOrCreate(
+                ['scientific_name' => $sp['scientific_name']],
+                $sp
+            );
         }
     }
 }

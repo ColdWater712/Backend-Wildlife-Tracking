@@ -40,11 +40,19 @@ class AuthController extends Controller
 
         RateLimiter::clear($throttleKey);
         
-        // Hapus token lama agar user hanya punya 1 sesi aktif
+        // Hapus token lama
         $user->tokens()->delete();
         
         // Buat token baru
         $token = $user->createToken('api-token')->plainTextToken;
+
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => $user->user_id,
+            'action' => 'LOGIN',
+            'details' => json_encode(['ip' => $request->ip()]),
+            'timestamp' => now(),
+        ]);
 
         return response()->json([
             'success' => true,
@@ -65,6 +73,16 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        $user = $request->user();
+        
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => $user->user_id,
+            'action' => 'LOGOUT',
+            'details' => json_encode(['ip' => $request->ip()]),
+            'timestamp' => now(),
+        ]);
+
         // Revoke token saat ini
         $request->user()->currentAccessToken()->delete();
         
@@ -82,6 +100,26 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'OK',
             'data' => $request->user()->load('role'),
+            'errors' => null,
+        ], 200);
+    }
+
+    public function refresh(Request $request)
+    {
+        $user = $request->user();
+        
+        // Hapus token lama
+        $request->user()->currentAccessToken()->delete();
+        
+        // Buat token baru
+        $token = $user->createToken('api-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Token berhasil di-refresh.',
+            'data' => [
+                'token' => $token,
+            ],
             'errors' => null,
         ], 200);
     }

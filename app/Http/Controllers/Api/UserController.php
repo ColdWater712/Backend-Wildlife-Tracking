@@ -46,6 +46,15 @@ class UserController extends Controller
         $data = $request->validated();
         $data['password'] = Hash::make($data['password']);
         $user = User::create($data);
+
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id,
+            'action' => 'CREATE_USER',
+            'details' => json_encode(['user_id' => $user->user_id, 'email' => $user->email]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success($user->load('role'), 'User berhasil dibuat', 201);
     }
 
@@ -57,6 +66,15 @@ class UserController extends Controller
             $data['password'] = Hash::make($data['password']);
         }
         $user->update($data);
+
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id,
+            'action' => 'UPDATE_USER',
+            'details' => json_encode(['user_id' => $user->user_id]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success($user->fresh()->load('role'), 'User berhasil diperbarui');
     }
 
@@ -66,8 +84,19 @@ class UserController extends Controller
         if ($user->user_id === auth()->id()) {
             return $this->error('Tidak dapat menghapus akun sendiri', 422);
         }
+
+        // Soft delete
         $user->delete();
-        return $this->success(null, 'User berhasil dihapus');
+
+        // Log aktivitas
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE_USER',
+            'details' => json_encode(['user_id' => $user->user_id]),
+            'timestamp' => now(),
+        ]);
+
+        return $this->success(null, 'User berhasil dihapus (soft delete)');
     }
 
     public function updateProfile(Request $request)
@@ -78,6 +107,14 @@ class UserController extends Controller
             'email' => 'sometimes|email|max:150|unique:users,email,' . $user->user_id . ',user_id',
         ]);
         $user->update($request->only(['name', 'email']));
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $user->user_id,
+            'action' => 'UPDATE_PROFILE',
+            'details' => json_encode(['fields' => array_keys($request->only(['name', 'email']))]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success($user->fresh(), 'Profil diperbarui');
     }
 
@@ -94,6 +131,39 @@ class UserController extends Controller
         }
 
         $user->update(['password' => Hash::make($request->new_password)]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $user->user_id,
+            'action' => 'CHANGE_PASSWORD',
+            'details' => json_encode(['ip' => $request->ip()]),
+            'timestamp' => now(),
+        ]);
+
         return $this->success(null, 'Password berhasil diubah');
+    }
+
+    // ✅ Endpoint baru: List user tokens
+    public function getUserTokens($id)
+    {
+        $user = User::findOrFail($id);
+        $tokens = $user->tokens()->select('id', 'name', 'last_used_at', 'created_at')->get();
+        return $this->success($tokens);
+    }
+
+    // ✅ Endpoint baru: Revoke specific token
+    public function revokeUserToken($userId, $tokenId)
+    {
+        $user = User::findOrFail($userId);
+        $token = $user->tokens()->findOrFail($tokenId);
+        $token->delete();
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'REVOKE_TOKEN',
+            'details' => json_encode(['user_id' => $userId, 'token_id' => $tokenId]),
+            'timestamp' => now(),
+        ]);
+
+        return $this->success(null, 'Token berhasil dicabut');
     }
 }

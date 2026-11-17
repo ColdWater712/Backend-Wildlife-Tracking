@@ -17,8 +17,17 @@ class User extends Authenticatable
     public $incrementing = true;
     public $timestamps = false;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'role_id'];
-    protected $hidden = ['password'];
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'role',
+        'role_id',
+    ];
+
+    protected $hidden = [
+        'password',
+    ];
 
     protected function casts(): array
     {

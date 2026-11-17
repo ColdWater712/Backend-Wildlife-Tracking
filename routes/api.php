@@ -23,11 +23,12 @@ use Illuminate\Support\Facades\Route;
 // Public Routes
 Route::post('/login', [AuthController::class, 'login']);
 
-// Protected Routes (Dilindungi oleh Sanctum, Timeout 2 Jam, dan Audit Log)
+// Protected Routes
 Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(function () {
 
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/auth/refresh', [AuthController::class, 'refresh']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::patch('/me', [UserController::class, 'updateProfile']);
     Route::put('/me/password', [UserController::class, 'changePassword']);
@@ -38,6 +39,8 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     // Users
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::apiResource('users', UserController::class)->except('index', 'show');
+        Route::get('users/{id}/tokens', [UserController::class, 'getUserTokens']);
+        Route::delete('users/{id}/tokens/{tokenId}', [UserController::class, 'revokeUserToken']);
     });
     Route::get('users', [UserController::class, 'index']);
     Route::get('users/{id}', [UserController::class, 'show']);
@@ -179,6 +182,8 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     Route::get('media-uploads', [AiPredictionController::class, 'mediaUploads']);
     Route::get('media-uploads/{id}', [AiPredictionController::class, 'showMedia']);
     Route::get('media-uploads/{id}/file', [AiPredictionController::class, 'file']);
+    Route::post('media-uploads/{id}/predictions', [AiPredictionController::class, 'triggerPrediction']);
+    Route::get('media-uploads/{id}/predictions', [AiPredictionController::class, 'getMediaPredictions']);
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::put('ai-predictions/{id}', [AiPredictionController::class, 'update']);
         Route::delete('ai-predictions/{id}', [AiPredictionController::class, 'destroy']);
