@@ -13,35 +13,30 @@ class StoreUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:100',
-            'email' => 'required|email|max:150|unique:users,email',
-            'password' => 'required|string|min:6',
-            'role' => 'required|in:konservasionis_lapangan,peneliti_ekologi,administrator_sistem,pengambil_kebijakan',
-            'role_id' => 'required|integer|exists:roles,role_id',
+            'username'  => 'nullable|string|max:100',
+            'full_name' => 'nullable|string|max:100',
+            'name'      => 'nullable|string|max:100',
+            'email'     => 'required|email|max:150|unique:users,email',
+            'password'  => 'required|string|min:6',
+            'role'      => 'required|in:konservasionis_lapangan,peneliti_ekologi,administrator_sistem,pengambil_kebijakan',
+            'role_id'   => 'nullable|integer|exists:roles,role_id',
         ];
     }
 
-    public function messages(): array
+    public function withValidator(Validator $validator)
     {
-        return [
-            'name.required' => 'Nama wajib diisi.',
-            'email.required' => 'Email wajib diisi.',
-            'email.email' => 'Format email tidak valid.',
-            'email.unique' => 'Email sudah terdaftar.',
-            'password.required' => 'Password wajib diisi.',
-            'password.min' => 'Password minimal 6 karakter.',
-            'role.in' => 'Role tidak valid.',
-            'role_id.exists' => 'Role tidak ditemukan.',
-        ];
+        $validator->after(function ($v) {
+            if (!$this->input('name') && !$this->input('full_name') && !$this->input('username')) {
+                $v->errors()->add('name', 'Nama wajib diisi.');
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator)
     {
         throw new HttpResponseException(response()->json([
-            'success' => false,
-            'message' => $validator->errors()->first(),
-            'data' => null,
-            'errors' => $validator->errors(),
+            'success' => false, 'message' => $validator->errors()->first(),
+            'data' => null, 'errors' => $validator->errors(),
         ], 422));
     }
 }

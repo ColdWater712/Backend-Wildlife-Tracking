@@ -22,24 +22,16 @@ class AnimalController extends Controller
             $query->where(fn($q) => $q->where('name', 'like', "%{$s}%")
                 ->orWhereHas('species', fn($sq) => $sq->where('common_name', 'like', "%{$s}%")));
         }
-
-        if ($request->filled('species_id')) {
-            $query->where('species_id', $request->species_id);
-        }
-
-        if ($request->filled('gender')) {
-            $query->where('gender', $request->gender);
-        }
-
+        if ($request->filled('species_id')) $query->where('species_id', $request->species_id);
+        if ($request->filled('gender'))     $query->where('gender', $request->gender);
         if ($request->has('is_active') && $request->input('is_active') !== 'all') {
             $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
         }
 
-        $sort = $request->input('orderBy', 'animal_id');
-        $dir = $request->input('order', 'asc');
-        $query->orderBy($sort, $dir);
+        $query->orderBy($request->input('orderBy', 'animal_id'), $request->input('order', 'asc'));
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        // ✅ FE animal.service pakai unwrapData → array
+        return $this->list($query->get());
     }
 
     public function show($id)
@@ -51,6 +43,12 @@ class AnimalController extends Controller
     public function store(StoreAnimalRequest $request)
     {
         $animal = Animal::create($request->validated());
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'CREATE_ANIMAL',
+            'details' => json_encode(['animal_id' => $animal->animal_id]), 'timestamp' => now(),
+        ]);
+
         return $this->success($animal->load('species'), 'Satwa berhasil dibuat', 201);
     }
 
@@ -58,6 +56,12 @@ class AnimalController extends Controller
     {
         $animal = Animal::findOrFail($id);
         $animal->update($request->validated());
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_ANIMAL',
+            'details' => json_encode(['animal_id' => $animal->animal_id]), 'timestamp' => now(),
+        ]);
+
         return $this->success($animal->fresh()->load('species'), 'Satwa diperbarui');
     }
 
@@ -66,6 +70,12 @@ class AnimalController extends Controller
         $request->validate(['is_active' => 'required|boolean']);
         $animal = Animal::findOrFail($id);
         $animal->update(['is_active' => $request->boolean('is_active')]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_ANIMAL_STATUS',
+            'details' => json_encode(['animal_id' => $animal->animal_id, 'is_active' => $animal->is_active]), 'timestamp' => now(),
+        ]);
+
         return $this->success($animal->fresh(), 'Status satwa diperbarui');
     }
 
@@ -73,6 +83,12 @@ class AnimalController extends Controller
     {
         $animal = Animal::findOrFail($id);
         $animal->delete();
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(), 'action' => 'DELETE_ANIMAL',
+            'details' => json_encode(['animal_id' => $animal->animal_id]), 'timestamp' => now(),
+        ]);
+
         return $this->success(null, 'Satwa dihapus (soft delete)');
     }
 }

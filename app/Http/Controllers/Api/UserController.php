@@ -22,78 +22,76 @@ class UserController extends Controller
             $s = $request->search;
             $query->where(fn($q) => $q->where('name', 'like', "%{$s}%")->orWhere('email', 'like', "%{$s}%"));
         }
-        if ($request->filled('role_id')) {
-            $query->where('role_id', $request->role_id);
-        }
-        if ($request->filled('role')) {
-            $query->where('role', $request->role);
-        }
+        if ($request->filled('role_id')) $query->where('role_id', $request->role_id);
+        if ($request->filled('role'))    $query->where('role', $request->role);
 
-        $sort = $request->input('orderBy', 'user_id');
-        $dir = $request->input('order', 'asc');
-        $query->orderBy($sort, $dir);
+        $paginator = $query->orderBy($request->input('orderBy', 'user_id'), $request->input('order', 'asc'))
+            ->paginate($request->input('per_page', 25));
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        // ✅ FE user.service expect data = {items, meta}
+        return $this->paginatedItems(
+            $paginator->getCollection()->map(fn($u) => $this->presentUser($u))->all(),
+            [
+                'total'       => $paginator->total(),
+                'page'        => $paginator->currentPage(),
+                'per_page'    => $paginator->perPage(),
+                'total_pages' => $paginator->lastPage(),
+                'total_items' => $paginator->total(),
+            ]
+        );
     }
 
     public function show($id)
     {
-        return $this->success(User::with('role')->findOrFail($id));
+        return $this->success($this->presentUser(User::with('role')->findOrFail($id)));
     }
 
     public function store(StoreUserRequest $request)
     {
         $data = $request->validated();
+        $data['name'] = $data['full_name'] ?? $data['username'] ?? $data['name'];
         $data['password'] = Hash::make($data['password']);
+        unset($data['username'], $data['full_name']);
+
         $user = User::create($data);
 
-        // Log aktivitas
         \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id,
-            'action' => 'CREATE_USER',
-            'details' => json_encode(['user_id' => $user->user_id, 'email' => $user->email]),
-            'timestamp' => now(),
+            'user_id' => $request->user()->user_id, 'action' => 'CREATE_USER',
+            'details' => json_encode(['user_id' => $user->user_id]), 'timestamp' => now(),
         ]);
 
-        return $this->success($user->load('role'), 'User berhasil dibuat', 201);
+        return $this->success($this->presentUser($user->load('role')), 'User berhasil dibuat', 201);
     }
 
     public function update(UpdateUserRequest $request, $id)
     {
         $user = User::findOrFail($id);
         $data = $request->validated();
-        if (isset($data['password'])) {
-            $data['password'] = Hash::make($data['password']);
+        if (!empty($data['full_name']) || !empty($data['username'])) {
+            $data['name'] = $data['full_name'] ?? $data['username'];
         }
+        if (isset($data['password'])) $data['password'] = Hash::make($data['password']);
+        unset($data['username'], $data['full_name']);
+
         $user->update($data);
 
-        // Log aktivitas
         \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id,
-            'action' => 'UPDATE_USER',
-            'details' => json_encode(['user_id' => $user->user_id]),
-            'timestamp' => now(),
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_USER',
+            'details' => json_encode(['user_id' => $user->user_id]), 'timestamp' => now(),
         ]);
 
-        return $this->success($user->fresh()->load('role'), 'User berhasil diperbarui');
+        return $this->success($this->presentUser($user->fresh()->load('role')), 'User berhasil diperbarui');
     }
 
     public function destroy($id)
     {
         $user = User::findOrFail($id);
-        if ($user->user_id === auth()->id()) {
-            return $this->error('Tidak dapat menghapus akun sendiri', 422);
-        }
-
-        // Soft delete
+        if ($user->user_id === auth()->id()) return $this->error('Tidak dapat menghapus akun sendiri', 422);
         $user->delete();
 
-        // Log aktivitas
         \App\Models\ActivityLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'DELETE_USER',
-            'details' => json_encode(['user_id' => $user->user_id]),
-            'timestamp' => now(),
+            'user_id' => auth()->id(), 'action' => 'DELETE_USER',
+            'details' => json_encode(['user_id' => $user->user_id]), 'timestamp' => now(),
         ]);
 
         return $this->success(null, 'User berhasil dihapus (soft delete)');
@@ -104,18 +102,13 @@ class UserController extends Controller
         $user = $request->user();
         $request->validate([
             'name' => 'sometimes|string|max:100',
+            'full_name' => 'sometimes|string|max:100',
             'email' => 'sometimes|email|max:150|unique:users,email,' . $user->user_id . ',user_id',
         ]);
-        $user->update($request->only(['name', 'email']));
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $user->user_id,
-            'action' => 'UPDATE_PROFILE',
-            'details' => json_encode(['fields' => array_keys($request->only(['name', 'email']))]),
-            'timestamp' => now(),
-        ]);
-
-        return $this->success($user->fresh(), 'Profil diperbarui');
+        $data = $request->only(['name', 'email']);
+        if ($request->filled('full_name')) $data['name'] = $request->full_name;
+        $user->update($data);
+        return $this->success($this->presentUser($user->fresh()), 'Profil diperbarui');
     }
 
     public function changePassword(Request $request)
@@ -125,43 +118,33 @@ class UserController extends Controller
             'current_password' => 'required|string',
             'new_password' => 'required|string|min:6',
         ]);
-
         if (!Hash::check($request->current_password, $user->password)) {
             return $this->error('Password lama tidak sesuai', 422);
         }
-
         $user->update(['password' => Hash::make($request->new_password)]);
 
         \App\Models\ActivityLog::create([
-            'user_id' => $user->user_id,
-            'action' => 'CHANGE_PASSWORD',
-            'details' => json_encode(['ip' => $request->ip()]),
-            'timestamp' => now(),
+            'user_id' => $user->user_id, 'action' => 'CHANGE_PASSWORD',
+            'details' => json_encode(['ip' => $request->ip()]), 'timestamp' => now(),
         ]);
 
         return $this->success(null, 'Password berhasil diubah');
     }
 
-    // ✅ Endpoint baru: List user tokens
     public function getUserTokens($id)
     {
-        $user = User::findOrFail($id);
-        $tokens = $user->tokens()->select('id', 'name', 'last_used_at', 'created_at')->get();
-        return $this->success($tokens);
+        $tokens = User::findOrFail($id)->tokens()->select('id', 'name', 'last_used_at', 'created_at')->get();
+        return $this->list($tokens);
     }
 
-    // ✅ Endpoint baru: Revoke specific token
     public function revokeUserToken($userId, $tokenId)
     {
-        $user = User::findOrFail($userId);
-        $token = $user->tokens()->findOrFail($tokenId);
+        $token = User::findOrFail($userId)->tokens()->findOrFail($tokenId);
         $token->delete();
 
         \App\Models\ActivityLog::create([
-            'user_id' => auth()->id(),
-            'action' => 'REVOKE_TOKEN',
-            'details' => json_encode(['user_id' => $userId, 'token_id' => $tokenId]),
-            'timestamp' => now(),
+            'user_id' => auth()->id(), 'action' => 'REVOKE_TOKEN',
+            'details' => json_encode(['user_id' => $userId, 'token_id' => $tokenId]), 'timestamp' => now(),
         ]);
 
         return $this->success(null, 'Token berhasil dicabut');

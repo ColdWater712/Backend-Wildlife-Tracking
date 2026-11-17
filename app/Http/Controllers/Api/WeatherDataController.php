@@ -16,22 +16,14 @@ class WeatherDataController extends Controller
     {
         $query = WeatherData::with('gpsReading');
 
-        if ($request->filled('reading_id')) {
-            $query->where('reading_id', $request->reading_id);
-        }
-        if ($request->filled('source')) {
-            $query->where('source', $request->source);
-        }
-        if ($request->filled('start_date')) {
-            $query->where('observed_at', '>=', $request->start_date);
-        }
-        if ($request->filled('end_date')) {
-            $query->where('observed_at', '<=', $request->end_date);
-        }
+        if ($request->filled('reading_id')) $query->where('reading_id', $request->reading_id);
+        if ($request->filled('source'))     $query->where('source', $request->source);
+        if ($request->filled('start_date')) $query->where('observed_at', '>=', $request->start_date);
+        if ($request->filled('end_date'))   $query->where('observed_at', '<=', $request->end_date);
 
         $query->orderBy('observed_at', 'desc');
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        return $this->list($query->get());
     }
 
     public function show($id)
@@ -73,9 +65,7 @@ class WeatherDataController extends Controller
     public function byReading($readingId)
     {
         $weather = WeatherData::where('reading_id', $readingId)->first();
-        if (!$weather) {
-            return $this->error('Data cuaca tidak ditemukan', 404);
-        }
+        if (!$weather) return $this->error('Data cuaca tidak ditemukan', 404);
         return $this->success($weather);
     }
 }

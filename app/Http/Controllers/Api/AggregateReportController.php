@@ -17,19 +17,13 @@ class AggregateReportController extends Controller
     {
         $query = AggregateReport::with('generator');
 
-        if ($request->filled('report_type')) {
-            $query->where('report_type', $request->report_type);
-        }
-        if ($request->filled('period_start')) {
-            $query->where('period_start', '>=', $request->period_start);
-        }
-        if ($request->filled('period_end')) {
-            $query->where('period_end', '<=', $request->period_end);
-        }
+        if ($request->filled('report_type')) $query->where('report_type', $request->report_type);
+        if ($request->filled('period_start')) $query->where('period_start', '>=', $request->period_start);
+        if ($request->filled('period_end'))   $query->where('period_end', '<=', $request->period_end);
 
         $query->orderBy('generated_at', 'desc');
 
-        return $this->paginated($query->paginate($request->input('per_page', 25)));
+        return $this->list($query->get());
     }
 
     public function show($id)
@@ -57,10 +51,15 @@ class AggregateReportController extends Controller
 
         $report = AggregateReport::create([
             'generated_by' => $request->user()->user_id,
-            'report_type' => $request->report_type,
+            'report_type'  => $request->report_type,
             'period_start' => $request->period_start,
-            'period_end' => $request->period_end,
-            'file_path' => $fileName,
+            'period_end'   => $request->period_end,
+            'file_path'    => $fileName,
+        ]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'GENERATE_REPORT',
+            'details' => json_encode(['report_id' => $report->report_id]), 'timestamp' => now(),
         ]);
 
         return $this->success($report->load('generator'), 'Laporan berhasil digenerate', 201);
@@ -82,11 +81,9 @@ class AggregateReportController extends Controller
     public function download($id)
     {
         $report = AggregateReport::findOrFail($id);
-
         if (!$report->file_path || !Storage::disk('public')->exists($report->file_path)) {
             return $this->error('File laporan tidak ditemukan', 404);
         }
-
         return Storage::disk('public')->download($report->file_path);
     }
 
