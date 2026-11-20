@@ -10,19 +10,17 @@ use Illuminate\Support\Facades\Log;
 class AiPredictionService
 {
     protected GeminiService $geminiService;
-    protected float $confidenceThreshold = 0.60;
+    protected float $confidenceThreshold = 0.50;
 
-    /**
-     * Mapping keyword Gemini → database spesies
-     */
+    // ✅ Mapping lebih fleksibel: kata kunci pendek saja
     protected array $labelMapping = [
-        'orangutan' => ['orangutan', 'pongo', 'kera besar', 'ape'],
-        'harimau'   => ['harimau', 'tiger', 'panthera', 'kucing besar'],
+        'harimau'   => ['harimau', 'tiger', 'panthera', 'macan'],
         'gajah'     => ['gajah', 'elephant', 'elephas'],
-        'badak'     => ['badak', 'rhino', 'rhinoceros', 'dicerorhinus'],
-        'rusa'      => ['rusa', 'deer', 'sambar', ' cervus', 'rusa unicolor'],
-        'beruang'   => ['beruang', 'bear', 'helarctos', 'ursus'],
-        'babi'      => ['babi hutan', 'wild boar', 'sus'],
+        'orangutan' => ['orangutan', 'pongo', 'ape', 'primate', 'kera', 'monkey'],
+        'badak'     => ['badak', 'rhino', 'rhinoceros'],
+        'rusa'      => ['rusa', 'deer', 'sambar', 'cervus'],
+        'beruang'   => ['beruang', 'bear', 'helarctos'],
+        'babi'      => ['babi', 'boar', 'pig', 'sus'],
         'macan'     => ['macan', 'leopard', 'dahan', 'neofelis'],
     ];
 
@@ -31,9 +29,6 @@ class AiPredictionService
         $this->geminiService = $geminiService;
     }
 
-    /**
-     * Proses gambar via Gemini Vision → simpan ke ai_predictions
-     */
     public function processImage(AiMediaUpload $media): AiPrediction
     {
         $filePath = storage_path('app/public/' . $media->file_path);
@@ -45,15 +40,13 @@ class AiPredictionService
 
         $predictedSpecies = null;
         $confidence       = 0.0;
-        $modelVersion     = env('GEMINI_MODEL', 'gemini-1.5-flash');
-        $aiLabel          = null;
+        $modelVersion     = env('GEMINI_MODEL', 'gemini-3.8-flash');
+        $processingStatus = 'completed';
 
         try {
             if (!file_exists($filePath)) {
                 throw new \Exception("File gambar tidak ditemukan: {$filePath}");
             }
-
-            Log::info("Gemini AI Request: Media #{$media->media_id}");
 
             $result      = $this->geminiService->classifyImage($filePath);
             $predictions = $result['predictions'] ?? [];
@@ -64,45 +57,41 @@ class AiPredictionService
 
             $topPrediction = $predictions[0];
             $aiLabel       = strtolower(trim($topPrediction['label'] ?? 'unknown'));
-            $confidence    = (float) ($topPrediction['score'] ?? 0.75);
+            $confidence    = (float) ($topPrediction['score'] ?? 0.0);
 
-            Log::info("Gemini Detected: {$aiLabel} (confidence: {$confidence})");
+            Log::info("🤖 GEMINI PREDICTION", [
+                'media_id'   => $media->media_id,
+                'label'      => $aiLabel,
+                'confidence' => $confidence,
+            ]);
 
-            if ($confidence >= $this->confidenceThreshold) {
-                $predictedSpecies = $this->matchSpeciesByLabel($aiLabel, $species);
+            $predictedSpecies = $this->matchSpeciesByLabel($aiLabel, $species);
+
+            if (!$predictedSpecies) {
+                Log::warning("⚠️ Label '{$aiLabel}' tidak cocok dengan database spesies");
+                $processingStatus = 'unrecognized';
+            } elseif ($confidence < $this->confidenceThreshold) {
+                Log::info("📉 Confidence rendah: {$confidence}");
             }
 
         } catch (\Exception $e) {
-            Log::error('Gemini AI Service error: ' . $e->getMessage());
-        }
-
-        // Fallback deterministik jika AI gagal
-        if (!$predictedSpecies) {
-            $hash = crc32(file_exists($filePath) ? file_get_contents($filePath) : 'fallback');
-            $index = abs($hash) % $species->count();
-            $predictedSpecies = $species->values()[$index];
-            $confidence = 0.30;
-            $modelVersion = 'Deterministic-Fallback';
-            Log::info("Using Deterministic Fallback: {$predictedSpecies->common_name}");
+            Log::error('❌ Gemini AI error: ' . $e->getMessage());
+            $processingStatus = 'failed';
         }
 
         return AiPrediction::create([
             'media_id'             => $media->media_id,
-            'predicted_species_id' => $predictedSpecies->species_id,
+            'predicted_species_id' => $predictedSpecies?->species_id,
             'confidence'           => $confidence,
             'model_version'        => $modelVersion,
-            'processing_status'    => 'completed',
+            'processing_status'    => $processingStatus,
             'processed_at'         => now(),
             'verification_status'  => 'pending',
         ]);
     }
 
-    /**
-     * Match label Gemini ke database spesies (fuzzy matching)
-     */
     protected function matchSpeciesByLabel(string $label, $species): ?Species
     {
-        // 1. Cek mapping keyword
         foreach ($this->labelMapping as $keyword => $aliases) {
             if (str_contains($label, $keyword)) {
                 foreach ($aliases as $alias) {
@@ -115,17 +104,9 @@ class AiPredictionService
             }
         }
 
-        // 2. Fuzzy match langsung
-        $matched = $species->first(function ($sp) use ($label) {
+        return $species->first(function ($sp) use ($label) {
             return str_contains(strtolower($sp->common_name), $label)
-                || str_contains(strtolower($sp->scientific_name), $label)
-                || str_contains($label, strtolower($sp->common_name));
+                || str_contains(strtolower($sp->scientific_name), $label);
         });
-
-        if ($matched) return $matched;
-
-        // 3. Fallback: species pertama
-        Log::warning("Gemini label '{$label}' tidak match ke database, pakai species pertama");
-        return $species->first();
     }
 }

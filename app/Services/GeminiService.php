@@ -15,7 +15,7 @@ class GeminiService
     public function __construct()
     {
         $this->apiKey  = (string) env('GEMINI_API_KEY', '');
-        $this->model   = (string) env('GEMINI_MODEL', 'gemini-1.5-flash');
+        $this->model   = (string) env('GEMINI_MODEL', 'gemini-3.8-flash');
         $this->timeout = (int) env('GEMINI_TIMEOUT', 60);
         $this->baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -24,9 +24,14 @@ class GeminiService
         }
     }
 
+    protected function http()
+    {
+        return Http::timeout($this->timeout)
+            ->withOptions(['verify' => false]);
+    }
+
     /**
-     * ✅ Klasifikasi gambar satwa (prediksi spesies)
-     * Mengembalikan format sama dengan HuggingFaceService agar controller tidak perlu diubah
+     * Klasifikasi gambar satwa
      */
     public function classifyImage(string $imagePath, ?string $model = null): array
     {
@@ -37,19 +42,24 @@ class GeminiService
         try {
             $imageData = file_get_contents($imagePath);
             $mimeType  = mime_content_type($imagePath) ?: 'image/jpeg';
+            $modelName = $model ?? $this->model;
 
-            $prompt = "You are a wildlife identification expert for Taman Nasional Gunung Leuser.
-Analyze this image and identify the animal species.
-Return ONLY a valid JSON array (no markdown, no code fences, no extra text) in this EXACT format:
-[{\"label\": \"species common name in Indonesian\", \"score\": 0.95}]
-List up to 3 possible species with confidence scores. Use Indonesian common names like 'Orangutan Sumatra', 'Harimau Sumatra', 'Gajah Sumatra', 'Badak Sumatra', 'Rusa Sambar', 'Beruang Madu'.";
+            // ✅ PROMPT SUPER KETAT: minta jawaban SANGAT PENDEK agar tidak terpotong
+            $prompt = "What animal is in this image? Answer with ONLY this exact JSON format, nothing else:
+[{\"label\":\"<animal>\",\"score\":<0.0-1.0>}]
+Rules:
+- label must be ONE word or short phrase in Indonesian (e.g. Harimau, Gajah, Orangutan)
+- score is confidence 0.0 to 1.0
+- if no animal visible, use label \"unknown\" and score 0.0
+- NO explanation, NO markdown, NO extra text. Just the JSON array.
+- Keep response under 50 characters total.";
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->http()
                 ->withHeaders([
                     'x-goog-api-key' => $this->apiKey,
                     'Content-Type' => 'application/json',
                 ])
-                ->post("{$this->baseUrl}/{$this->model}:generateContent", [
+                ->post("{$this->baseUrl}/{$modelName}:generateContent", [
                     'contents' => [
                         [
                             'parts' => [
@@ -64,27 +74,35 @@ List up to 3 possible species with confidence scores. Use Indonesian common name
                         ],
                     ],
                     'generationConfig' => [
-                        'temperature' => 0.2,
-                        'maxOutputTokens' => 500,
+                        'temperature' => 0.0,          // ✅ Deterministic, tidak kreatif
+                        'maxOutputTokens' => 1024,     // ✅ NAIKKAN dari 200 → 1024
+                        'responseMimeType' => 'application/json', // ✅ PAKSA JSON
                     ],
                 ]);
+
+            Log::info('🤖 GEMINI RAW RESPONSE', [
+                'model'  => $modelName,
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
 
             if (!$response->successful()) {
                 throw new \Exception('Gemini API error: ' . $response->body());
             }
 
             $text = $response->json('candidates.0.content.parts.0.text') ?? '';
+
+            Log::info('🤖 GEMINI PARSED TEXT', ['text' => $text]);
+
             $predictions = $this->extractJsonArray($text);
 
             if (empty($predictions)) {
-                throw new \Exception('Gemini tidak mengembalikan prediksi valid: ' . $text);
+                throw new \Exception('Gemini tidak mengembalikan prediksi valid. Raw: ' . $text);
             }
 
-            Log::info('Gemini classify OK', ['path' => basename($imagePath), 'result' => $predictions[0] ?? null]);
-
             return [
-                'success' => true,
-                'model' => $this->model . ' (vision)',
+                'success'     => true,
+                'model'       => $modelName . ' (vision)',
                 'predictions' => $predictions,
             ];
 
@@ -95,7 +113,7 @@ List up to 3 possible species with confidence scores. Use Indonesian common name
     }
 
     /**
-     * ✅ Deteksi objek dalam gambar (bounding box)
+     * Deteksi objek
      */
     public function detectObjects(string $imagePath, ?string $model = null): array
     {
@@ -106,18 +124,18 @@ List up to 3 possible species with confidence scores. Use Indonesian common name
         try {
             $imageData = file_get_contents($imagePath);
             $mimeType  = mime_content_type($imagePath) ?: 'image/jpeg';
+            $modelName = $model ?? $this->model;
 
-            $prompt = "Detect all animals and objects in this image.
-Return ONLY a valid JSON array (no markdown, no extra text) in this EXACT format:
-[{\"box\": {\"xmin\": 0, \"ymin\": 0, \"xmax\": 100, \"ymax\": 100}, \"label\": \"object name\", \"score\": 0.9}]
-Use percentage-based coordinates (0-100). List all detected animals/objects.";
+            $prompt = "Detect objects in this image. Return ONLY a JSON array, nothing else:
+[{\"box\":{\"xmin\":0,\"ymin\":0,\"xmax\":100,\"ymax\":100},\"label\":\"<object>\",\"score\":0.9}]
+Coordinates are percentages 0-100. Keep response concise.";
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->http()
                 ->withHeaders([
                     'x-goog-api-key' => $this->apiKey,
                     'Content-Type' => 'application/json',
                 ])
-                ->post("{$this->baseUrl}/{$this->model}:generateContent", [
+                ->post("{$this->baseUrl}/{$modelName}:generateContent", [
                     'contents' => [
                         [
                             'parts' => [
@@ -132,23 +150,27 @@ Use percentage-based coordinates (0-100). List all detected animals/objects.";
                         ],
                     ],
                     'generationConfig' => [
-                        'temperature' => 0.2,
-                        'maxOutputTokens' => 800,
+                        'temperature' => 0.0,
+                        'maxOutputTokens' => 2048,     // ✅ NAIKKAN
+                        'responseMimeType' => 'application/json',
                     ],
                 ]);
+
+            Log::info('🤖 GEMINI DETECT RAW', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
 
             if (!$response->successful()) {
                 throw new \Exception('Gemini API error: ' . $response->body());
             }
 
-            $text = $response->json('candidates.0.content.parts.0.text') ?? '';
+            $text    = $response->json('candidates.0.content.parts.0.text') ?? '';
             $objects = $this->extractJsonArray($text);
-
-            Log::info('Gemini detect OK', ['count' => count($objects)]);
 
             return [
                 'success' => true,
-                'model' => $this->model . ' (vision)',
+                'model'   => $modelName . ' (vision)',
                 'objects' => $objects,
             ];
 
@@ -159,34 +181,26 @@ Use percentage-based coordinates (0-100). List all detected animals/objects.";
     }
 
     /**
-     * ✅ Ringkasan teks untuk AI Summary Report
+     * Ringkasan teks
      */
     public function summarizeText(string $text, ?string $model = null, int $maxLength = 200): array
     {
         try {
-            $prompt = "Buatlah ringkasan eksekutif profesional dalam bahasa Indonesia dari data monitoring satwa berikut.
-Fokus pada: jumlah satwa aktif, insiden kritis, kondisi perangkat, dan rekomendasi tindakan.
-Maksimal {$maxLength} karakter. Jangan gunakan markdown, hanya teks murni.
+            $modelName = $model ?? $this->model;
+            $prompt = "Buat ringkasan profesional dalam bahasa Indonesia dari data monitoring satwa ini. Maksimal {$maxLength} karakter. Jangan gunakan markdown. Data: {$text}";
 
-DATA:
-{$text}";
-
-            $response = Http::timeout($this->timeout)
+            $response = $this->http()
                 ->withHeaders([
                     'x-goog-api-key' => $this->apiKey,
                     'Content-Type' => 'application/json',
                 ])
-                ->post("{$this->baseUrl}/{$this->model}:generateContent", [
+                ->post("{$this->baseUrl}/{$modelName}:generateContent", [
                     'contents' => [
-                        [
-                            'parts' => [
-                                ['text' => $prompt],
-                            ],
-                        ],
+                        ['parts' => [['text' => $prompt]]],
                     ],
                     'generationConfig' => [
                         'temperature' => 0.4,
-                        'maxOutputTokens' => 400,
+                        'maxOutputTokens' => 1024,     // ✅ NAIKKAN
                     ],
                 ]);
 
@@ -196,11 +210,9 @@ DATA:
 
             $summary = trim($response->json('candidates.0.content.parts.0.text') ?? '');
 
-            Log::info('Gemini summarize OK', ['length' => strlen($summary)]);
-
             return [
                 'success' => true,
-                'model' => $this->model . ' (text)',
+                'model'   => $modelName . ' (text)',
                 'summary' => $summary,
             ];
 
@@ -211,59 +223,75 @@ DATA:
     }
 
     /**
-     * ✅ Health check API Gemini
+     * Health check
      */
     public function healthCheck(): array
     {
         try {
-            $response = Http::timeout(10)
-                ->withHeaders([
-                    'x-goog-api-key' => $this->apiKey,
-                ])
+            $response = $this->http()
+                ->withHeaders(['x-goog-api-key' => $this->apiKey])
                 ->get("{$this->baseUrl}");
 
-            if ($response->successful()) {
-                return [
-                    'status' => 'ok',
-                    'message' => 'Gemini API aktif dan terhubung',
-                    'model' => $this->model,
-                ];
-            }
-
-            return [
-                'status' => 'error',
-                'message' => 'Gemini API menolak: ' . $response->body(),
-            ];
+            return $response->successful()
+                ? ['status' => 'ok', 'message' => 'Gemini API aktif', 'model' => $this->model]
+                : ['status' => 'error', 'message' => $response->body()];
         } catch (\Exception $e) {
-            return [
-                'status' => 'error',
-                'message' => $e->getMessage(),
-            ];
+            return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }
 
     /**
-     * Helper: Extract JSON array dari response LLM yang mungkin mengandung markdown
+     * ✅ Extract JSON array — sekarang lebih tahan terhadap response terpotong
      */
     protected function extractJsonArray(string $text): array
     {
         $text = trim($text);
+        if (empty($text)) return [];
 
-        // Hapus markdown code fence ```json ... ```
-        if (preg_match('/```(?:json)?\s*(.+?)\s*```/s', $text, $matches)) {
-            $text = $matches[1];
+        // Strategi 1: Hapus markdown code fence
+        if (preg_match('/```(?:json)?\s*(\[[\s\S]*?\])\s*```/', $text, $m)) {
+            $decoded = json_decode($m[1], true);
+            if (is_array($decoded)) return $decoded;
         }
 
-        // Cari array JSON pertama
-        if (preg_match('/\[\s*\{.*?\}\s*\]/s', $text, $matches)) {
-            $decoded = json_decode($matches[0], true);
-            if (is_array($decoded)) {
-                return $decoded;
+        // Strategi 2: Decode langsung
+        $decoded = json_decode($text, true);
+        if (is_array($decoded)) return $decoded;
+
+        // Strategi 3: Cari array JSON utuh
+        if (preg_match('/\[\s*\{.*?\}\s*\]/', $text, $m)) {
+            $decoded = json_decode($m[0], true);
+            if (is_array($decoded)) return $decoded;
+        }
+
+        // Strategi 4: ✅ PERBAIKAN — coba "tutup" JSON yang terpotong
+        // Jika text mulai dengan [ tapi tidak berakhir dengan ], coba lengkapi
+        if (str_starts_with($text, '[') && !str_ends_with($text, ']')) {
+            $candidates = [
+                $text . '}]',           // tutup string + object + array
+                $text . '"}]',          // tutup string dengan quote + object + array
+                $text . ',"score":0.5}]',
+            ];
+            foreach ($candidates as $candidate) {
+                $decoded = json_decode($candidate, true);
+                if (is_array($decoded) && !empty($decoded)) {
+                    Log::info('🔧 JSON terpotong berhasil diperbaiki', ['original' => $text, 'fixed' => $candidate]);
+                    return $decoded;
+                }
             }
         }
 
-        // Fallback: coba decode langsung
-        $decoded = json_decode($text, true);
-        return is_array($decoded) ? $decoded : [];
+        // Strategi 5: ✅ Regex fallback — extract label & score manual
+        if (preg_match('/"label"\s*:\s*"([^"]*)"/', $text, $mLabel)) {
+            $score = 0.7; // default jika terpotong
+            if (preg_match('/"score"\s*:\s*([0-9.]+)/', $text, $mScore)) {
+                $score = (float) $mScore[1];
+            }
+            Log::info('🔧 Fallback regex extract berhasil', ['label' => $mLabel[1], 'score' => $score]);
+            return [['label' => $mLabel[1], 'score' => $score]];
+        }
+
+        Log::warning('⚠️ Gagal parse JSON dari Gemini', ['text' => $text]);
+        return [];
     }
 }
