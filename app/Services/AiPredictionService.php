@@ -9,10 +9,9 @@ use Illuminate\Support\Facades\Log;
 
 class AiPredictionService
 {
-    protected GeminiService $geminiService;
+    protected GroqService $groqService;
     protected float $confidenceThreshold = 0.50;
 
-    // ✅ Mapping lebih fleksibel: kata kunci pendek saja
     protected array $labelMapping = [
         'harimau'   => ['harimau', 'tiger', 'panthera', 'macan'],
         'gajah'     => ['gajah', 'elephant', 'elephas'],
@@ -20,13 +19,11 @@ class AiPredictionService
         'badak'     => ['badak', 'rhino', 'rhinoceros'],
         'rusa'      => ['rusa', 'deer', 'sambar', 'cervus'],
         'beruang'   => ['beruang', 'bear', 'helarctos'],
-        'babi'      => ['babi', 'boar', 'pig', 'sus'],
-        'macan'     => ['macan', 'leopard', 'dahan', 'neofelis'],
     ];
 
-    public function __construct(GeminiService $geminiService)
+    public function __construct(GroqService $groqService)
     {
-        $this->geminiService = $geminiService;
+        $this->groqService = $groqService;
     }
 
     public function processImage(AiMediaUpload $media): AiPrediction
@@ -40,7 +37,7 @@ class AiPredictionService
 
         $predictedSpecies = null;
         $confidence       = 0.0;
-        $modelVersion     = env('GEMINI_MODEL', 'gemini-3.8-flash');
+        $modelVersion     = env('GROQ_VISION_MODEL', 'llama-3.2-11b-vision-preview');
         $processingStatus = 'completed';
 
         try {
@@ -48,18 +45,18 @@ class AiPredictionService
                 throw new \Exception("File gambar tidak ditemukan: {$filePath}");
             }
 
-            $result      = $this->geminiService->classifyImage($filePath);
+            $result      = $this->groqService->classifyImage($filePath);
             $predictions = $result['predictions'] ?? [];
 
             if (empty($predictions)) {
-                throw new \Exception('Gemini tidak mengembalikan prediksi');
+                throw new \Exception('Groq tidak mengembalikan prediksi');
             }
 
             $topPrediction = $predictions[0];
             $aiLabel       = strtolower(trim($topPrediction['label'] ?? 'unknown'));
             $confidence    = (float) ($topPrediction['score'] ?? 0.0);
 
-            Log::info("🤖 GEMINI PREDICTION", [
+            Log::info("🤖 GROQ PREDICTION", [
                 'media_id'   => $media->media_id,
                 'label'      => $aiLabel,
                 'confidence' => $confidence,
@@ -75,7 +72,7 @@ class AiPredictionService
             }
 
         } catch (\Exception $e) {
-            Log::error('❌ Gemini AI error: ' . $e->getMessage());
+            Log::error('❌ Groq AI error: ' . $e->getMessage());
             $processingStatus = 'failed';
         }
 
