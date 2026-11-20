@@ -178,19 +178,25 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('activity-logs/{id}', [ActivityLogController::class, 'destroy']);
     });
 
-    // --- AI Predictions & Media ---
+    // ==========================================
+    // ✅ AI PREDICTIONS & SUMMARY (GEMINI)
+    // ==========================================
     Route::get('ai-predictions', [AiPredictionController::class, 'index']);
     Route::get('ai-predictions/pending-verification', [AiPredictionController::class, 'pendingVerification']);
     Route::get('ai-predictions/{id}', [AiPredictionController::class, 'show']);
+    
+    // Upload & Predict
     Route::post('ai/upload', [AiPredictionController::class, 'upload']);
     Route::post('ai-predictions/{id}/verify', [AiPredictionController::class, 'verify']);
     Route::post('ai-predictions/{id}/retry', [AiPredictionController::class, 'retry']);
+    
+    // Media Management
     Route::get('media-uploads', [AiPredictionController::class, 'mediaUploads']);
     Route::get('media-uploads/{id}', [AiPredictionController::class, 'showMedia']);
     Route::get('media-uploads/{id}/file', [AiPredictionController::class, 'file']);
     Route::post('media-uploads/{id}/predictions', [AiPredictionController::class, 'triggerPrediction']);
     Route::get('media-uploads/{id}/predictions', [AiPredictionController::class, 'getMediaPredictions']);
-
+    
     // ✅ ROUTE BARU: AI Summary, Health Check, Detect Objects
     Route::get('ai/summary-report', [AiPredictionController::class, 'generateSummaryReport']);
     Route::get('ai/health', [AiPredictionController::class, 'aiHealthCheck']);
