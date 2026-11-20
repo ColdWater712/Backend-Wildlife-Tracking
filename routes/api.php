@@ -45,7 +45,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     Route::get('users/{id}', [UserController::class, 'show']);
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::apiResource('users', UserController::class)->except('index', 'show');
-        Route::patch('users/{id}/status', [UserController::class, 'updateStatus']); // ✅ G-4: Dipindah ke dalam grup admin
+        Route::patch('users/{id}/status', [UserController::class, 'updateStatus']);
         Route::get('users/{id}/tokens', [UserController::class, 'getUserTokens']);
         Route::delete('users/{id}/tokens/{tokenId}', [UserController::class, 'revokeUserToken']);
     });
@@ -134,7 +134,7 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     Route::get('incidents/{id}/media', [IncidentReportController::class, 'media']);
     Route::middleware('role:konservasionis_lapangan,peneliti_ekologi,administrator_sistem')->group(function () {
         Route::post('incidents', [IncidentReportController::class, 'store']);
-        Route::post('incidents/{id}/media', [IncidentReportController::class, 'uploadMedia']); // ✅ G-1: Dipindah ke dalam grup yang tepat
+        Route::post('incidents/{id}/media', [IncidentReportController::class, 'uploadMedia']);
         Route::put('incidents/{id}', [IncidentReportController::class, 'update']);
         Route::patch('incidents/{id}/sync-status', [IncidentReportController::class, 'updateSyncStatus']);
         Route::delete('incidents/{id}', [IncidentReportController::class, 'destroy']);
@@ -190,6 +190,12 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     Route::get('media-uploads/{id}/file', [AiPredictionController::class, 'file']);
     Route::post('media-uploads/{id}/predictions', [AiPredictionController::class, 'triggerPrediction']);
     Route::get('media-uploads/{id}/predictions', [AiPredictionController::class, 'getMediaPredictions']);
+
+    // ✅ ROUTE BARU: AI Summary, Health Check, Detect Objects
+    Route::get('ai/summary-report', [AiPredictionController::class, 'generateSummaryReport']);
+    Route::get('ai/health', [AiPredictionController::class, 'aiHealthCheck']);
+    Route::post('ai/detect-objects', [AiPredictionController::class, 'detectObjects']);
+
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::put('ai-predictions/{id}', [AiPredictionController::class, 'update']);
         Route::delete('ai-predictions/{id}', [AiPredictionController::class, 'destroy']);
