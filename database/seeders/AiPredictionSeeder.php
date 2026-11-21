@@ -2,36 +2,45 @@
 
 namespace Database\Seeders;
 
-use App\Models\AiMediaUpload;
 use App\Models\AiPrediction;
+use App\Models\AiMediaUpload;
 use App\Models\Species;
-use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class AiPredictionSeeder extends Seeder
 {
     public function run(): void
     {
-        $media = AiMediaUpload::first();
-        $species = Species::first();
-        $admin = User::where('role', 'administrator_sistem')->first();
+        $mediaUploads = AiMediaUpload::all();
+        $species = Species::all();
 
-        if (!$media || !$species) return;
+        if ($mediaUploads->isEmpty() || $species->isEmpty()) {
+            return;
+        }
 
-        AiPrediction::updateOrCreate(
-            ['media_id' => $media->media_id, 'model_version' => 'YOLOv8-v1'],
+        $predictions = [
             [
-                'media_id' => $media->media_id,
-                'predicted_species_id' => $species->species_id,
-                'confidence' => 0.9829,
-                'model_version' => 'YOLOv8-v1',
-                'processing_status' => 'completed',
-                'processed_at' => now(),
-                'verification_status' => 'confirmed',
-                'verified_species_id' => $species->species_id,
-                'verified_by' => $admin?->user_id,
-                'verified_at' => now(),
-            ]
-        );
+                'media_id'             => $mediaUploads[0]->media_id,
+                'predicted_species_id' => $species->first()->species_id,
+                'confidence'           => 0.92,
+                'model_version'        => 'gemini-1.5-flash',
+                'processing_status'    => 'completed',
+                'verification_status'  => 'pending',
+                'processed_at'         => now(),
+            ],
+            [
+                'media_id'             => $mediaUploads[1]->media_id,
+                'predicted_species_id' => $species->skip(1)->first()?->species_id ?? $species->first()->species_id,
+                'confidence'           => 0.87,
+                'model_version'        => 'gemini-1.5-flash',
+                'processing_status'    => 'completed',
+                'verification_status'  => 'pending',
+                'processed_at'         => now(),
+            ],
+        ];
+
+        foreach ($predictions as $prediction) {
+            AiPrediction::create($prediction);
+        }
     }
 }

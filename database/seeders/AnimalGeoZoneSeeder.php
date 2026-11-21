@@ -2,10 +2,9 @@
 
 namespace Database\Seeders;
 
+use App\Models\AnimalGeoZone; // ✅ PERBAIKAN: Ganti dari AnimalGeoZoneVisit
 use App\Models\Animal;
-use App\Models\AnimalGeoZone;
 use App\Models\GeoZone;
-use App\Models\GpsReading;
 use Illuminate\Database\Seeder;
 
 class AnimalGeoZoneSeeder extends Seeder
@@ -13,22 +12,30 @@ class AnimalGeoZoneSeeder extends Seeder
     public function run(): void
     {
         $animals = Animal::all();
-        $zones = GeoZone::all();
+        $geoZones = GeoZone::all();
 
-        foreach ($animals as $i => $animal) {
-            $zone = $zones[$i % $zones->count()];
-            $reading = GpsReading::whereHas('device', fn($q) => $q->where('animal_id', $animal->animal_id))->first();
+        if ($animals->isEmpty() || $geoZones->isEmpty()) {
+            return;
+        }
 
-            AnimalGeoZone::updateOrCreate(
-                ['animal_id' => $animal->animal_id, 'zone_id' => $zone->zone_id, 'entered_at' => now()->subDays($i)],
-                [
-                    'animal_id' => $animal->animal_id,
-                    'zone_id' => $zone->zone_id,
-                    'entry_reading_id' => $reading?->reading_id,
-                    'entered_at' => now()->subDays($i),
-                    'exited_at' => $i % 2 === 0 ? now()->subDays($i)->addHours(4) : null,
-                ]
-            );
+        $visits = [
+            [
+                'animal_id'  => $animals->first()->animal_id,
+                'zone_id'    => $geoZones->first()->zone_id,
+                'entered_at' => now()->subDays(5),
+                'exited_at'  => now()->subDays(4),
+            ],
+            [
+                'animal_id'  => $animals->skip(1)->first()?->animal_id ?? $animals->first()->animal_id,
+                'zone_id'    => $geoZones->skip(1)->first()?->zone_id ?? $geoZones->first()->zone_id,
+                'entered_at' => now()->subDays(2),
+                'exited_at'  => null,
+            ],
+        ];
+
+        foreach ($visits as $visit) {
+            // ✅ PERBAIKAN: Gunakan AnimalGeoZone::create
+            AnimalGeoZone::create($visit);
         }
     }
 }

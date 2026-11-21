@@ -2,43 +2,108 @@
 
 namespace Database\Seeders;
 
-use App\Models\Animal;
-use App\Models\GeoZone;
 use App\Models\Notification;
-use App\Models\TrackingDevice;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class NotificationSeeder extends Seeder
 {
     public function run(): void
     {
         $users = User::all();
-        $animals = Animal::all();
-        $zones = GeoZone::all();
-        $devices = TrackingDevice::all();
 
-        $notifications = [
-            ['type' => 'risk_zone', 'msg' => 'Satwa memasuki zona perkebunan', 'read' => true],
-            ['type' => 'device_alert', 'msg' => 'Baterai perangkat lemah', 'read' => true],
-            ['type' => 'system', 'msg' => 'Laporan harian siap diunduh', 'read' => true],
-            ['type' => 'risk_zone', 'msg' => 'Satwa terdeteksi di zona lindung', 'read' => false],
-            ['type' => 'device_alert', 'msg' => 'Perangkat kehilangan sinyal', 'read' => false],
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        // ✅ DETEKSI NILAI ENUM YANG VALID DARI DATABASE
+        $enumValues = $this->getEnumValues('notifications', 'notification_type');
+        
+        // Jika tidak bisa detect ENUM, gunakan nilai default yang umum
+        if (empty($enumValues)) {
+            $enumValues = ['info', 'success', 'warning', 'error'];
+        }
+
+        // Ambil nilai pertama, kedua, ketiga dari ENUM (atau fallback)
+        $type1 = $enumValues[0] ?? 'info';
+        $type2 = $enumValues[1] ?? 'success';
+        $type3 = $enumValues[2] ?? 'warning';
+
+        // Deteksi kolom yang ada
+        $columns = Schema::getColumnListing('notifications');
+
+        $notificationsData = [
+            [
+                'user_id'           => $users->first()->user_id,
+                'notification_type' => $type1,
+                'title'             => 'Selamat datang di Wildlife Tracking System',
+                'subject'           => 'Selamat datang di Wildlife Tracking System',
+                'message'           => 'Sistem monitoring satwa TNGL telah aktif.',
+                'content'           => 'Sistem monitoring satwa TNGL telah aktif.',
+                'body'              => 'Sistem monitoring satwa TNGL telah aktif.',
+                'is_read'           => false,
+                'read'              => false,
+            ],
+            [
+                'user_id'           => $users->first()->user_id,
+                'notification_type' => $type2,
+                'title'             => 'Baterai perangkat rendah',
+                'subject'           => 'Baterai perangkat rendah',
+                'message'           => 'Perangkat GPS-001 memiliki baterai 15%.',
+                'content'           => 'Perangkat GPS-001 memiliki baterai 15%.',
+                'body'              => 'Perangkat GPS-001 memiliki baterai 15%.',
+                'is_read'           => false,
+                'read'              => false,
+            ],
+            [
+                'user_id'           => $users->skip(1)->first()?->user_id ?? $users->first()->user_id,
+                'notification_type' => $type3,
+                'title'             => 'Insiden konflik terdeteksi',
+                'subject'           => 'Insiden konflik terdeteksi',
+                'message'           => 'Harimau Sumatra terdeteksi di area perkebunan.',
+                'content'           => 'Harimau Sumatra terdeteksi di area perkebunan.',
+                'body'              => 'Harimau Sumatra terdeteksi di area perkebunan.',
+                'is_read'           => false,
+                'read'              => false,
+            ],
         ];
 
-        foreach ($notifications as $i => $n) {
-            Notification::updateOrCreate(
-                ['user_id' => $users[$i % $users->count()]->user_id, 'message' => $n['msg']],
-                [
-                    'user_id' => $users[$i % $users->count()]->user_id,
-                    'notification_type' => $n['type'],
-                    'message' => $n['msg'],
-                    'animal_id' => $animals[$i % $animals->count()]?->animal_id,
-                    'zone_id' => $zones[$i % $zones->count()]?->zone_id,
-                    'device_id' => $devices[$i % $devices->count()]?->device_id,
-                    'is_read' => $n['read'],
-                ]
-            );
+        foreach ($notificationsData as $data) {
+            $filteredData = array_intersect_key($data, array_flip($columns));
+            $filteredData = array_filter($filteredData, function($value) {
+                return $value !== null;
+            });
+            
+            Notification::create($filteredData);
+        }
+    }
+
+    /**
+     * Helper: Ambil nilai ENUM dari kolom database
+     */
+    protected function getEnumValues(string $table, string $column): array
+    {
+        try {
+            $result = DB::select("SHOW COLUMNS FROM `{$table}` WHERE Field = '{$column}'");
+            
+            if (empty($result)) {
+                return [];
+            }
+
+            $type = $result[0]->Type ?? '';
+            
+            // Parse ENUM values dari string seperti "enum('value1','value2','value3')"
+            if (preg_match("/^enum\((.+)\)$/", $type, $matches)) {
+                $enumString = $matches[1];
+                $values = str_getcsv($enumString, ',', "'");
+                return array_map('trim', $values);
+            }
+
+            return [];
+        } catch (\Exception $e) {
+            return [];
         }
     }
 }
