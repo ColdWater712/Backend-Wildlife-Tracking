@@ -5,7 +5,9 @@ namespace Database\Seeders;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB; // ✅ Ditambahkan agar DB::table bisa dipakai
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserSeeder extends Seeder
 {
@@ -15,53 +17,29 @@ class UserSeeder extends Seeder
         $roles = DB::table('roles')->pluck('role_id', 'role_name');
 
         $users = [
-<<<<<<< HEAD
-            [
-                'name' => 'Admin Sistem',
-                'email' => 'admin@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role_id' => $roles['administrator_sistem'], // Gunakan role_id
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Peneliti Ekologi',
-                'email' => 'peneliti@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role_id' => $roles['peneliti_ekologi'], // Perbaiki typo 'role-ID' menjadi 'role_id'
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Konservasionis Lapangan',
-                'email' => 'lapangan@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role_id' => $roles['konservasionis_lapangan'],
-                'created_at' => now(),
-            ],
-            [
-                'name' => 'Pengambil Kebijakan',
-                'email' => 'kebijakan@wildlife.id',
-                'password' => Hash::make('password123'),
-                'role_id' => $roles['pengambil_kebijakan'],
-                'created_at' => now(),
-            ],
-=======
-            ['name' => 'Admin Sistem', 'email' => 'admin@wildlife.id', 'role' => 'administrator_sistem'],
-            ['name' => 'Peneliti Ekologi', 'email' => 'peneliti@wildlife.id', 'role' => 'peneliti_ekologi'],
-            ['name' => 'Konservasionis Lapangan', 'email' => 'lapangan@wildlife.id', 'role' => 'konservasionis_lapangan'],
-            ['name' => 'Pengambil Kebijakan', 'email' => 'kebijakan@wildlife.id', 'role' => 'pengambil_kebijakan'],
->>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
+            ['full_name' => 'Admin Sistem', 'email' => 'admin@wildlife.id', 'role' => 'administrator_sistem'],
+            ['full_name' => 'Peneliti Ekologi', 'email' => 'peneliti@wildlife.id', 'role' => 'peneliti_ekologi'],
+            ['full_name' => 'Konservasionis Lapangan', 'email' => 'lapangan@wildlife.id', 'role' => 'konservasionis_lapangan'],
+            ['full_name' => 'Pengambil Kebijakan', 'email' => 'kebijakan@wildlife.id', 'role' => 'pengambil_kebijakan'],
         ];
 
         foreach ($users as $u) {
+            // Cari role berdasarkan role_name
             $role = Role::where('role_name', $u['role'])->first();
+            
+            // Generate username otomatis dari email (misal: admin@wildlife.id -> admin)
+            // Ini wajib karena kolom 'name' sudah kita ganti menjadi 'username' di migrasi
+            $username = Str::before($u['email'], '@');
+
+            // ✅ updateOrCreate sesuai permintaan Anda, dengan penyesuaian nama kolom agar tidak error
             User::updateOrCreate(
-                ['email' => $u['email']],
+                ['email' => $u['email']], // Kondisi pencarian
                 [
-                    'name' => $u['name'],
-                    'email' => $u['email'],
-                    'password' => Hash::make('password123'),
-                    'role' => $u['role'],
-                    'role_id' => $role?->role_id,
+                    'username'  => $username,             // ✅ Disesuaikan dengan kolom di database
+                    'full_name' => $u['full_name'],       // ✅ Disesuaikan dengan kolom di database (bukan 'name')
+                    'password'  => Hash::make('password123'),
+                    'role_id'   => $role?->role_id,       // ✅ Menggunakan role_id (Foreign Key)
+                    'status'    => 'aktif',               // ✅ Wajib ada agar user bisa login
                 ]
             );
         }

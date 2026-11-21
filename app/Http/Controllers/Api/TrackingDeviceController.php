@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreTrackingDeviceRequest;
-use App\Http\Requests\UpdateTrackingDeviceRequest;
 use App\Http\Traits\ApiResponse;
 use App\Models\TrackingDevice;
+use App\Models\GpsReading;
 use Illuminate\Http\Request;
 
 class TrackingDeviceController extends Controller
@@ -15,137 +14,115 @@ class TrackingDeviceController extends Controller
 
     public function index(Request $request)
     {
-        $query = TrackingDevice::with(['animal.species', 'latestReading']);
+        $query = TrackingDevice::with(['animal', 'assignedBy']);
 
-        if ($request->filled('device_condition') && $request->device_condition !== 'all') {
-            $query->where('device_condition', $request->device_condition);
-        }
-        if ($request->has('is_active') && $request->input('is_active') !== 'all') {
-            $val = $request->input('is_active');
-            $query->where('is_active', in_array(strtolower((string)$val), ['1','true','aktif','active','ya','yes']));
-        }
-        if ($request->filled('battery_below')) $query->where('battery_level', '<', (int) $request->battery_below);
-        if ($request->filled('animal_id'))     $query->where('animal_id', $request->animal_id);
+        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('model')) $query->where('model', $request->model);
+        if ($request->filled('battery_low')) $query->where('battery_level', '<', 20);
+        if ($request->filled('animal_id')) $query->where('animal_id', $request->animal_id);
         if ($request->filled('search')) {
-            $s = $request->search;
-            $query->where(fn($q) => $q->where('model', 'like', "%{$s}%")
-                ->orWhereHas('animal', fn($aq) => $aq->where('name', 'like', "%{$s}%")));
+            $search = $request->search;
+            $query->where('serial_number', 'like', "%{$search}%");
         }
 
-        $query->orderBy($request->input('orderBy', 'device_id'), $request->input('order', 'asc'));
+        $query->orderBy('created_at', 'desc');
 
-        // ✅ FE tracking-device.service pakai unwrapData → array
-        return $this->list($query->get());
+        return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(TrackingDevice::with(['animal.species', 'gpsReadings'])->findOrFail($id));
+        return $this->success(
+            TrackingDevice::with(['animal', 'assignedBy', 'gpsReadings'])->findOrFail($id)
+        );
     }
 
-    public function store(StoreTrackingDeviceRequest $request)
+    public function store(Request $request)
     {
-        $device = TrackingDevice::create($request->validated());
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'CREATE_DEVICE',
-            'details' => json_encode(['device_id' => $device->device_id]), 'timestamp' => now(),
+        $request->validate([
+            'serial_number' => 'required|string|unique:tracking_devices,serial_number',
+            'model'         => 'required|string',
+            'status'        => 'sometimes|string',
+            'battery_level' => 'sometimes|numeric|between:0,100',
         ]);
 
-        return $this->success($device->load('animal'), 'Perangkat berhasil dibuat', 201);
+        $device = TrackingDevice::create([
+            'serial_number' => $request->serial_number,
+            'model'         => $request->model,
+            'status'        => $request->input('status', 'active'),
+            'battery_level' => $request->input('battery_level', 100),
+            'assigned_by'   => $request->user()->user_id,
+        ]);
+
+        return $this->success($device->load(['animal', 'assignedBy']), 'Device berhasil dibuat', 201);
     }
 
-    public function update(UpdateTrackingDeviceRequest $request, $id)
-    {
-        $device = TrackingDevice::findOrFail($id);
-        $device->update($request->validated());
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE',
-            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($device->fresh()->load('animal'), 'Perangkat diperbarui');
-    }
-
-public function assignAnimal(Request $request, $id)
-{
-    $request->validate(['animal_id' => 'required|integer|exists:animals,animal_id']);
-    $device = TrackingDevice::findOrFail($id);
-
-    $existing = TrackingDevice::where('animal_id', $request->animal_id)->where('device_id', '!=', $id)->first();
-    if ($existing) return $this->error('Satwa ini sudah memiliki perangkat lain', 422);
-
-    // ✅ G-2: transaction update device + audit
-    DB::transaction(function () use ($device, $request) {
-        $device->update(['animal_id' => $request->animal_id]);
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id,
-            'action' => 'ASSIGN_DEVICE',
-            'details' => json_encode(['device_id' => $device->device_id, 'animal_id' => $request->animal_id]),
-            'timestamp' => now(),
-        ]);
-    });
-
-    return $this->success($device->fresh()->load('animal'), 'Perangkat dipasangkan ke satwa');
-}
-
-    public function unassignAnimal($id)
+    public function update(Request $request, $id)
     {
         $device = TrackingDevice::findOrFail($id);
-        $device->update(['animal_id' => null]);
-
-        \App\Models\ActivityLog::create([
-            'user_id' => auth()->id(), 'action' => 'UNASSIGN_DEVICE',
-            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
+        $request->validate([
+            'serial_number' => 'sometimes|string|unique:tracking_devices,serial_number,' . $device->device_id . ',device_id',
+            'model'         => 'sometimes|string',
+            'status'        => 'sometimes|string',
+            'battery_level' => 'sometimes|numeric|between:0,100',
         ]);
 
-        return $this->success($device->fresh(), 'Perangkat dilepas dari satwa');
-    }
-
-    public function updateCondition(Request $request, $id)
-    {
-        $request->validate(['device_condition' => 'required|in:normal,damaged,lost']);
-        $device = TrackingDevice::findOrFail($id);
-        $device->update(['device_condition' => $request->device_condition]);
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE_CONDITION',
-            'details' => json_encode(['device_id' => $id, 'condition' => $request->device_condition]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($device->fresh(), 'Kondisi perangkat diperbarui');
-    }
-
-    public function updateStatus(Request $request, $id)
-    {
-        $request->validate(['is_active' => 'required|boolean']);
-        $device = TrackingDevice::findOrFail($id);
-        $device->update(['is_active' => $request->boolean('is_active')]);
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE_STATUS',
-            'details' => json_encode(['device_id' => $id, 'is_active' => $device->is_active]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($device->fresh(), 'Status perangkat diperbarui');
-    }
-
-    public function latestReading($id)
-    {
-        $device = TrackingDevice::with('latestReading')->findOrFail($id);
-        return $this->success($device->latestReading);
+        $device->update($request->only(['serial_number', 'model', 'status', 'battery_level']));
+        return $this->success($device->fresh(['animal', 'assignedBy']), 'Device diperbarui');
     }
 
     public function destroy($id)
     {
         TrackingDevice::findOrFail($id)->delete();
+        return $this->success(null, 'Device dihapus');
+    }
 
-        \App\Models\ActivityLog::create([
-            'user_id' => auth()->id(), 'action' => 'DELETE_DEVICE',
-            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
-        ]);
+    public function assignAnimal(Request $request, $id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $request->validate(['animal_id' => 'required|exists:animals,animal_id']);
+        $device->update(['animal_id' => $request->animal_id, 'assigned_at' => now()]);
+        return $this->success($device->fresh(['animal']), 'Animal berhasil diassign ke device');
+    }
 
-        return $this->success(null, 'Perangkat dihapus');
+    public function unassignAnimal($id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $device->update(['animal_id' => null]);
+        return $this->success($device->fresh(), 'Animal di-unassign dari device');
+    }
+
+    public function updateCondition(Request $request, $id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $request->validate(['condition' => 'required|string']);
+        $device->update(['condition' => $request->condition]);
+        return $this->success($device->fresh(), 'Kondisi device diperbarui');
+    }
+
+    public function updateStatus(Request $request, $id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $request->validate(['status' => 'required|in:active,inactive,maintenance,lost']);
+        $device->update(['status' => $request->status]);
+        return $this->success($device->fresh(), 'Status device diperbarui');
+    }
+
+    public function latestReading($id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $reading = $device->gpsReadings()->latest('recorded_at')->first();
+        return $this->success($reading);
+    }
+
+    public function batteryHistory($id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $readings = $device->gpsReadings()
+            ->whereNotNull('battery_level')
+            ->orderBy('recorded_at', 'desc')
+            ->limit(100)
+            ->get(['recorded_at', 'battery_level']);
+        return $this->list($readings);
     }
 }

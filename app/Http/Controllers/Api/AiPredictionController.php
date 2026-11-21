@@ -33,14 +33,21 @@ class AiPredictionController extends Controller
         if ($request->filled('processing_status')) $query->where('processing_status', $request->processing_status);
         if ($request->filled('verification_status')) $query->where('verification_status', $request->verification_status);
         if ($request->filled('model_version')) $query->where('model_version', $request->model_version);
+        if ($request->filled('predicted_species_id')) $query->where('predicted_species_id', $request->predicted_species_id);
+        if ($request->filled('min_confidence')) $query->where('confidence', '>=', $request->min_confidence);
+        if ($request->filled('start_date')) $query->where('processed_at', '>=', $request->start_date);
+        if ($request->filled('end_date')) $query->where('processed_at', '<=', $request->end_date);
 
         $query->orderBy('processed_at', 'desc');
+
         return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(AiPrediction::with(['media', 'predictedSpecies', 'verifiedSpecies', 'verifier'])->findOrFail($id));
+        return $this->success(
+            AiPrediction::with(['media', 'predictedSpecies', 'verifiedSpecies', 'verifier'])->findOrFail($id)
+        );
     }
 
     public function pendingVerification()
@@ -109,7 +116,10 @@ class AiPredictionController extends Controller
             ]);
         });
 
-        return $this->success($prediction->fresh(['verifiedSpecies', 'verifier']), 'Prediksi AI berhasil diverifikasi.');
+        return $this->success(
+            $prediction->fresh(['verifiedSpecies', 'verifier']),
+            'Prediksi AI berhasil diverifikasi.'
+        );
     }
 
     public function retry($id)
@@ -159,17 +169,23 @@ class AiPredictionController extends Controller
     public function mediaUploads(Request $request)
     {
         $query = AiMediaUpload::with(['uploader', 'report', 'predictions']);
+
         if ($request->filled('uploaded_by')) $query->where('uploaded_by', $request->uploaded_by);
         if ($request->filled('report_id')) $query->where('report_id', $request->report_id);
         if ($request->filled('media_type')) $query->where('media_type', $request->media_type);
+        if ($request->filled('start_date')) $query->where('uploaded_at', '>=', $request->start_date);
+        if ($request->filled('end_date')) $query->where('uploaded_at', '<=', $request->end_date);
 
         $query->orderBy('uploaded_at', 'desc');
+
         return $this->list($query, 'OK', $request);
     }
 
     public function showMedia($id)
     {
-        return $this->success(AiMediaUpload::with(['uploader', 'report', 'predictions'])->findOrFail($id));
+        return $this->success(
+            AiMediaUpload::with(['uploader', 'report', 'predictions'])->findOrFail($id)
+        );
     }
 
     public function file($id)
@@ -217,13 +233,12 @@ class AiPredictionController extends Controller
     public function getMediaPredictions($mediaId)
     {
         $media = AiMediaUpload::findOrFail($mediaId);
-        $predictions = $media->predictions()->with(['predictedSpecies', 'verifiedSpecies', 'verifier'])->get();
+        $predictions = $media->predictions()
+            ->with(['predictedSpecies', 'verifiedSpecies', 'verifier'])
+            ->get();
         return $this->list($predictions);
     }
 
-    // ============================================
-    // ✅ METHOD BARU: AI Summary Report
-    // ============================================
     public function generateSummaryReport(Request $request)
     {
         $request->validate([
@@ -243,18 +258,12 @@ class AiPredictionController extends Controller
         }
     }
 
-    // ============================================
-    // ✅ METHOD BARU: AI Health Check
-    // ============================================
     public function aiHealthCheck()
     {
         $health = $this->summaryService->healthCheck();
         return $this->success($health);
     }
 
-    // ============================================
-    // ✅ METHOD BARU: Detect Objects
-    // ============================================
     public function detectObjects(Request $request)
     {
         $request->validate([

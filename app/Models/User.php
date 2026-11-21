@@ -3,92 +3,70 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $table = 'users';
     protected $primaryKey = 'user_id';
     public $incrementing = true;
-    public $timestamps = false;
+    protected $keyType = 'int';
+    public $timestamps = true;
 
-<<<<<<< HEAD
-    // GANTI 'role' menjadi 'role_id'
-    protected $fillable = ['name', 'email', 'password', 'role_id'];
-    protected $hidden = ['password'];
-=======
+    // ✅ FIELD YANG SESUAI DENGAN SKEMA DATABASE TERBARU
     protected $fillable = [
-        'name',
+        'username',
+        'full_name',
         'email',
         'password',
-        'role',
         'role_id',
+        'address',
+        'phone',
         'status',
     ];
 
     protected $hidden = [
         'password',
+        'remember_token',
     ];
->>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
 
-    protected function casts(): array
-    {
-        return [
-            'password' => 'hashed',
-            'created_at' => 'datetime',
-            'deleted_at' => 'datetime',
-        ];
-    }
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
 
-<<<<<<< HEAD
-    // TAMBAHKAN relasi ke model Role
-=======
->>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
+    /**
+     * Relasi ke tabel roles
+     */
     public function role()
     {
         return $this->belongsTo(Role::class, 'role_id', 'role_id');
     }
-<<<<<<< HEAD
-=======
 
-    public function incidents()
+    /**
+     * Relasi ke permissions (melalui role)
+     */
+    public function permissions()
     {
-        return $this->hasMany(IncidentReport::class, 'user_id', 'user_id');
+        return $this->hasManyThrough(
+            Permission::class,
+            RolePermission::class,
+            'role_id',       // Foreign key di tabel role_permissions
+            'permission_id', // Foreign key di tabel permissions
+            'role_id',       // Local key di tabel users
+            'permission_id'  // Local key di tabel role_permissions
+        );
     }
 
-    public function notifications()
-    {
-        return $this->hasMany(Notification::class, 'user_id', 'user_id');
-    }
-
-    public function geoZones()
-    {
-        return $this->hasMany(GeoZone::class, 'created_by', 'user_id');
-    }
-
+    /**
+     * Relasi ke activity logs
+     */
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class, 'user_id', 'user_id');
     }
-
-    public function aiMediaUploads()
-    {
-        return $this->hasMany(AiMediaUpload::class, 'uploaded_by', 'user_id');
-    }
-
-    public function aiVerifications()
-    {
-        return $this->hasMany(AiPrediction::class, 'verified_by', 'user_id');
-    }
-
-    public function aggregateReports()
-    {
-        return $this->hasMany(AggregateReport::class, 'generated_by', 'user_id');
-    }
->>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
 }

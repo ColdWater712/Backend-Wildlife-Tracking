@@ -3,13 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreIncidentReportRequest;
-use App\Http\Requests\UpdateIncidentReportRequest;
 use App\Http\Traits\ApiResponse;
-use App\Models\AiMediaUpload;
 use App\Models\IncidentReport;
+use App\Models\AiMediaUpload;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class IncidentReportController extends Controller
@@ -18,157 +15,126 @@ class IncidentReportController extends Controller
 
     public function index(Request $request)
     {
-        $query = IncidentReport::with('reporter');
+        $query = IncidentReport::with(['reporter', 'animal', 'species']);
 
-        if ($request->user()->role !== 'administrator_sistem') {
-            $query->where('user_id', $request->user()->user_id);
-        }
         if ($request->filled('incident_type')) $query->where('incident_type', $request->incident_type);
-        if ($request->filled('sync_status'))   $query->where('sync_status', $request->sync_status);
-        if ($request->filled('animal_code'))   $query->where('animal_code', 'like', '%' . $request->animal_code . '%');
-        if ($request->filled('start_date'))    $query->where('timestamp', '>=', $request->start_date);
-        if ($request->filled('end_date'))      $query->where('timestamp', '<=', $request->end_date);
+        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('animal_id')) $query->where('animal_id', $request->animal_id);
+        if ($request->filled('species_id')) $query->where('species_id', $request->species_id);
+        if ($request->filled('reporter_id')) $query->where('reported_by', $request->reporter_id);
+        if ($request->filled('start_date')) $query->where('timestamp', '>=', $request->start_date);
+        if ($request->filled('end_date')) $query->where('timestamp', '<=', $request->end_date);
+        if ($request->filled('search')) {
+            $query->where('description', 'like', "%" . $request->search . "%");
+        }
 
         $query->orderBy('timestamp', 'desc');
-
         return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(IncidentReport::with(['reporter', 'media'])->findOrFail($id));
+        return $this->success(IncidentReport::with(['reporter', 'animal', 'species', 'media'])->findOrFail($id));
     }
 
-    public function store(StoreIncidentReportRequest $request)
+    public function store(Request $request)
     {
-        // ✅ G-2: transaction untuk create + audit log
-        $report = DB::transaction(function () use ($request) {
-            $validated = $request->validated();
-            $validated['user_id'] = $request->user()->user_id;
-            $validated['timestamp'] = now();
-            $validated['sync_status'] = $validated['sync_status'] ?? 'pending_sync';
+        $request->validate([
+            'incident_type' => 'required|string',
+            'description'   => 'required|string',
+            'timestamp'     => 'required|date',
+            'latitude'      => 'required|numeric',
+            'longitude'     => 'required|numeric',
+            'location'      => 'nullable|string',
+            'animal_id'     => 'nullable|exists:animals,animal_id',
+            'species_id'    => 'nullable|exists:species,species_id',
+            'status'        => 'sometimes|string',
+        ]);
 
-            $report = IncidentReport::create($validated);
+        $incident = IncidentReport::create([
+            'incident_type' => $request->incident_type,
+            'description'   => $request->description,
+            'timestamp'     => $request->timestamp,
+            'latitude'      => $request->latitude,
+            'longitude'     => $request->longitude,
+            'location'      => $request->input('location', 'Lokasi Tidak Diketahui'), // WAJIB ADA
+            'animal_id'     => $request->animal_id,
+            'species_id'    => $request->species_id,
+            'reported_by'   => $request->user()->user_id,
+            'status'        => $request->input('status', 'pending'),
+        ]);
 
-            \App\Models\ActivityLog::create([
-                'user_id' => $request->user()->user_id,
-                'action' => 'CREATE_INCIDENT',
-                'details' => json_encode(['report_id' => $report->report_id]),
-                'timestamp' => now(),
-            ]);
-
-            return $report;
-        });
-
-        return $this->success($report->load('reporter'), 'Laporan insiden berhasil dibuat', 201);
+        return $this->success($incident->load(['reporter', 'animal', 'species']), 'Incident berhasil dibuat', 201);
     }
 
-    public function update(UpdateIncidentReportRequest $request, $id)
+    public function update(Request $request, $id)
     {
-        $report = IncidentReport::findOrFail($id);
+        $incident = IncidentReport::findOrFail($id);
+        $request->validate([
+            'incident_type' => 'sometimes|string',
+            'description'   => 'sometimes|string',
+            'timestamp'     => 'sometimes|date',
+            'latitude'      => 'sometimes|numeric',
+            'longitude'     => 'sometimes|numeric',
+            'location'      => 'nullable|string',
+            'animal_id'     => 'nullable|exists:animals,animal_id',
+            'species_id'    => 'nullable|exists:species,species_id',
+            'status'        => 'sometimes|string',
+        ]);
 
-        if ($report->user_id !== $request->user()->user_id && $request->user()->role !== 'administrator_sistem') {
-            return $this->error('Tidak memiliki akses', 403);
-        }
+        $incident->update($request->only([
+            'incident_type', 'description', 'timestamp', 'latitude', 'longitude',
+            'location', 'animal_id', 'species_id', 'status'
+        ]));
 
-        DB::transaction(function () use ($report, $request) {
-            $report->update($request->validated());
-            \App\Models\ActivityLog::create([
-                'user_id' => $request->user()->user_id,
-                'action' => 'UPDATE_INCIDENT',
-                'details' => json_encode(['report_id' => $report->report_id]),
-                'timestamp' => now(),
-            ]);
-        });
+        return $this->success($incident->fresh(['reporter', 'animal', 'species']), 'Incident diperbarui');
+    }
 
-        return $this->success($report->fresh(), 'Laporan diperbarui');
+    public function destroy($id)
+    {
+        IncidentReport::findOrFail($id)->delete();
+        return $this->success(null, 'Incident dihapus');
     }
 
     public function updateSyncStatus(Request $request, $id)
     {
-        $request->validate(['sync_status' => 'required|in:pending_sync,synced,failed']);
-        $report = IncidentReport::findOrFail($id);
-        $report->update(['sync_status' => $request->sync_status]);
-
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id,
-            'action' => 'UPDATE_INCIDENT_SYNC',
-            'details' => json_encode(['report_id' => $id, 'sync_status' => $request->sync_status]),
-            'timestamp' => now(),
-        ]);
-
-        return $this->success($report->fresh(), 'Status sinkronisasi diperbarui');
+        $incident = IncidentReport::findOrFail($id);
+        $request->validate(['sync_status' => 'required|in:synced,pending,failed']);
+        $incident->update(['sync_status' => $request->sync_status]);
+        return $this->success($incident->fresh(), 'Sync status diperbarui');
     }
 
-    public function destroy(Request $request, $id)
+    public function media($id)
     {
-        $report = IncidentReport::findOrFail($id);
-
-        if ($report->user_id !== $request->user()->user_id && $request->user()->role !== 'administrator_sistem') {
-            return $this->error('Tidak memiliki akses', 403);
-        }
-
-        DB::transaction(function () use ($report, $request) {
-            $report->delete(); // soft delete
-            \App\Models\ActivityLog::create([
-                'user_id' => $request->user()->user_id,
-                'action' => 'DELETE_INCIDENT',
-                'details' => json_encode(['report_id' => $report->report_id]),
-                'timestamp' => now(),
-            ]);
-        });
-
-        return $this->success(null, 'Laporan dihapus (soft delete)');
+        $incident = IncidentReport::findOrFail($id);
+        $media = AiMediaUpload::where('report_id', $incident->getKey())->get();
+        return $this->list($media);
     }
 
-    public function media($reportId)
+    public function uploadMedia(Request $request, $id)
     {
-        $report = IncidentReport::findOrFail($reportId);
-        return $this->list($report->media);
-    }
-
-    /**
-     * ✅ G-1: POST /incidents/{reportId}/media — upload media terkait laporan
-     */
-    public function uploadMedia(Request $request, $reportId)
-    {
-        $request->validate([
-            'file' => 'required|file|max:10240|mimes:jpg,jpeg,png,gif,webp,mp4,mov',
-            'media_type' => 'nullable|in:image,video',
-        ]);
-
-        $report = IncidentReport::findOrFail($reportId);
-
-        if ($report->user_id !== $request->user()->user_id
-            && $request->user()->role !== 'administrator_sistem') {
-            return $this->error('Tidak memiliki akses ke laporan ini', 403);
-        }
+        $incident = IncidentReport::findOrFail($id);
+        $request->validate(['file' => 'required|file|mimes:jpg,jpeg,png|max:10240']);
 
         $file = $request->file('file');
-        $path = $file->store('ai-uploads', 'public');
+        $path = $file->store('incident-media', 'public');
 
-        $ext = strtolower($file->getClientOriginalExtension());
-        $mediaType = $request->input('media_type')
-            ?? (in_array($ext, ['mp4', 'mov']) ? 'video' : 'image');
+        $media = AiMediaUpload::create([
+            'uploaded_by' => $request->user()->user_id,
+            'report_id'   => $incident->getKey(),
+            'media_type'  => 'image',
+            'file_path'   => $path,
+        ]);
 
-        $media = DB::transaction(function () use ($report, $path, $mediaType, $request) {
-            $media = AiMediaUpload::create([
-                'uploaded_by' => $request->user()->user_id,
-                'report_id' => $report->report_id,
-                'media_type' => $mediaType,
-                'file_path' => $path,
-            ]);
+        return $this->success($media, 'Media berhasil diupload', 201);
+    }
 
-            \App\Models\ActivityLog::create([
-                'user_id' => $request->user()->user_id,
-                'action' => 'UPLOAD_INCIDENT_MEDIA',
-                'details' => json_encode(['report_id' => $report->report_id, 'media_id' => $media->media_id]),
-                'timestamp' => now(),
-            ]);
-
-            return $media;
-        });
-
-        return $this->success($media, 'Media berhasil diunggah ke laporan', 201);
+    public function byAnimal($animalId)
+    {
+        $incidents = IncidentReport::where('animal_id', $animalId)
+            ->with(['reporter', 'species'])
+            ->orderBy('timestamp', 'desc')
+            ->get();
+        return $this->list($incidents);
     }
 }

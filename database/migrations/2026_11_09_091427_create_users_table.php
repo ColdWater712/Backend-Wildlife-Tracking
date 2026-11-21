@@ -6,20 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-   public function up(): void
-{
-    Schema::create('users', function (Blueprint $table) {
-        $table->id('user_id');
-        $table->string('name', 100);
-        $table->string('email', 150)->unique();
-        $table->string('password', 255)->comment('hash bcrypt/argon2');
-        
-        $table->unsignedBigInteger('role_id');
-        $table->foreign('role_id')->references('role_id')->on('roles')->onDelete('cascade');
-        
-        $table->timestamp('created_at')->useCurrent();
-    });
-}
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id('user_id');
+            $table->string('username')->unique();
+            $table->string('full_name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            
+            // ✅ DEFINISI FOREIGN KEY EKSPLISIT (Paling Aman, Tanpa Tebakan Laravel)
+            $table->unsignedBigInteger('role_id')->nullable();
+            $table->foreign('role_id')->references('role_id')->on('roles')->onDelete('set null');
+            
+            $table->string('address')->nullable();
+            $table->string('phone')->nullable();
+            $table->enum('status', ['aktif', 'nonaktif'])->default('aktif');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+    }
 
     public function down(): void
     {

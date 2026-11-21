@@ -3,35 +3,42 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StorePermissionRequest;
 use App\Http\Traits\ApiResponse;
 use App\Models\Permission;
 use Illuminate\Http\Request;
 
 class PermissionController extends Controller
 {
-    use ApiResponse; // ✅ Pastikan trait ini ada
+    use ApiResponse;
 
     public function index(Request $request)
     {
-        $query = Permission::with('roles');
+        $query = Permission::withCount('roles');
 
         if ($request->filled('search')) {
-            $query->where('permission_name', 'like', '%' . $request->search . '%');
+            $search = $request->search;
+            $query->where('name', 'like', "%{$search}%");
         }
 
-        // ✅ Gunakan $this->list() agar return array sesuai kebutuhan test & frontend
+        $query->orderBy('name', 'asc');
+
         return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(Permission::with('roles')->findOrFail($id));
+        return $this->success(
+            Permission::with(['roles'])->withCount('roles')->findOrFail($id)
+        );
     }
 
-    public function store(StorePermissionRequest $request)
+    public function store(Request $request)
     {
-        $permission = Permission::create($request->validated());
+        $request->validate([
+            'name' => 'required|string|unique:permissions,name',
+        ]);
+
+        $permission = Permission::create(['name' => $request->name]);
         return $this->success($permission, 'Permission berhasil dibuat', 201);
     }
 
@@ -39,20 +46,16 @@ class PermissionController extends Controller
     {
         $permission = Permission::findOrFail($id);
         $request->validate([
-            'permission_name' => 'sometimes|string|max:100',
-            'description' => 'sometimes|nullable|string|max:255',
+            'name' => 'sometimes|string|unique:permissions,name,' . $permission->permission_id . ',permission_id',
         ]);
-        $permission->update($request->validated());
+
+        $permission->update($request->only(['name']));
         return $this->success($permission->fresh(), 'Permission diperbarui');
     }
 
     public function destroy($id)
     {
-        $permission = Permission::findOrFail($id);
-        if ($permission->roles()->count() > 0) {
-            return $this->error('Permission masih digunakan oleh role', 422);
-        }
-        $permission->delete();
+        Permission::findOrFail($id)->delete();
         return $this->success(null, 'Permission dihapus');
     }
 }

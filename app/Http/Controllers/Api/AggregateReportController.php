@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreAggregateReportRequest;
 use App\Http\Traits\ApiResponse;
 use App\Models\AggregateReport;
 use Illuminate\Http\Request;
@@ -15,85 +14,108 @@ class AggregateReportController extends Controller
 
     public function index(Request $request)
     {
-        $query = AggregateReport::with('generator');
+        $query = AggregateReport::with(['generatedBy']);
 
         if ($request->filled('report_type')) $query->where('report_type', $request->report_type);
-        if ($request->filled('period_start')) $query->where('period_start', '>=', $request->period_start);
-        if ($request->filled('period_end'))   $query->where('period_end', '<=', $request->period_end);
+        if ($request->filled('start_date')) $query->where('period_start', '>=', $request->start_date);
+        if ($request->filled('end_date')) $query->where('period_end', '<=', $request->end_date);
 
         $query->orderBy('generated_at', 'desc');
 
-        return $this->list($query->get());
+        return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(AggregateReport::with('generator')->findOrFail($id));
+        return $this->success(
+            AggregateReport::with(['generatedBy'])->findOrFail($id)
+        );
     }
 
-    public function store(StoreAggregateReportRequest $request)
+    public function store(Request $request)
     {
-        $validated = $request->validated();
-        $validated['generated_by'] = $request->user()->user_id;
-        $report = AggregateReport::create($validated);
-        return $this->success($report->load('generator'), 'Laporan berhasil dibuat', 201);
+        $request->validate([
+            'title'       => 'required|string',
+            'content'     => 'required|string',
+            'period_start' => 'required|date',
+            'period_end'   => 'required|date|after_or_equal:period_start',
+            'report_type' => 'sometimes|string',
+        ]);
+
+        $report = AggregateReport::create([
+            'title'        => $request->title,
+            'content'      => $request->content,
+            'period_start' => $request->period_start,
+            'period_end'   => $request->period_end,
+            'report_type'  => $request->input('report_type', 'manual'),
+            'generated_by' => $request->user()->user_id,
+            'generated_at' => now(),
+        ]);
+
+        return $this->success($report->load(['generatedBy']), 'Report berhasil dibuat', 201);
     }
 
     public function generate(Request $request)
     {
         $request->validate([
-            'report_type' => 'required|in:daily,weekly,monthly',
             'period_start' => 'required|date',
-            'period_end' => 'required|date|after_or_equal:period_start',
+            'period_end'   => 'required|date|after_or_equal:period_start',
+            'report_type'  => 'sometimes|string',
         ]);
 
-        $fileName = "reports/{$request->report_type}_{$request->period_start}_{$request->period_end}.pdf";
+        // Generate report content dari data
+        $content = $this->generateReportContent($request->period_start, $request->period_end);
 
         $report = AggregateReport::create([
-            'generated_by' => $request->user()->user_id,
-            'report_type'  => $request->report_type,
+            'title'        => "Laporan {$request->report_type} - {$request->period_start} s/d {$request->period_end}",
+            'content'      => $content,
             'period_start' => $request->period_start,
             'period_end'   => $request->period_end,
-            'file_path'    => $fileName,
+            'report_type'  => $request->input('report_type', 'auto'),
+            'generated_by' => $request->user()->user_id,
+            'generated_at' => now(),
         ]);
 
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'GENERATE_REPORT',
-            'details' => json_encode(['report_id' => $report->report_id]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($report->load('generator'), 'Laporan berhasil digenerate', 201);
+        return $this->success($report->load(['generatedBy']), 'Report berhasil digenerate', 201);
     }
 
     public function update(Request $request, $id)
     {
         $report = AggregateReport::findOrFail($id);
         $request->validate([
-            'report_type' => 'sometimes|in:daily,weekly,monthly',
-            'period_start' => 'sometimes|date',
-            'period_end' => 'sometimes|date|after_or_equal:period_start',
-            'file_path' => 'sometimes|nullable|string|max:500',
+            'title'   => 'sometimes|string',
+            'content' => 'sometimes|string',
         ]);
-        $report->update($request->validated());
-        return $this->success($report->fresh(), 'Laporan diperbarui');
+
+        $report->update($request->only(['title', 'content']));
+        return $this->success($report->fresh(['generatedBy']), 'Report diperbarui');
+    }
+
+    public function destroy($id)
+    {
+        AggregateReport::findOrFail($id)->delete();
+        return $this->success(null, 'Report dihapus');
     }
 
     public function download($id)
     {
         $report = AggregateReport::findOrFail($id);
-        if (!$report->file_path || !Storage::disk('public')->exists($report->file_path)) {
-            return $this->error('File laporan tidak ditemukan', 404);
-        }
-        return Storage::disk('public')->download($report->file_path);
+        $content = "Title: {$report->title}\nPeriod: {$report->period_start} to {$report->period_end}\n\n{$report->content}";
+        
+        return response($content)
+            ->header('Content-Type', 'text/plain')
+            ->header('Content-Disposition', 'attachment; filename="report_{$id}.txt"');
     }
 
-    public function destroy($id)
+    protected function generateReportContent(string $start, string $end): string
     {
-        $report = AggregateReport::findOrFail($id);
-        if ($report->file_path && Storage::disk('public')->exists($report->file_path)) {
-            Storage::disk('public')->delete($report->file_path);
-        }
-        $report->delete();
-        return $this->success(null, 'Laporan dihapus');
+        $animals = \App\Models\Animal::whereBetween('created_at', [$start, $end])->count();
+        $incidents = \App\Models\IncidentReport::whereBetween('timestamp', [$start, $end])->count();
+        $readings = \App\Models\GpsReading::whereBetween('recorded_at', [$start, $end])->count();
+
+        return "Laporan Periode {$start} - {$end}\n\n" .
+               "Total Animals: {$animals}\n" .
+               "Total Incidents: {$incidents}\n" .
+               "Total GPS Readings: {$readings}\n";
     }
 }

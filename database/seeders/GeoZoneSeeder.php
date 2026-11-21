@@ -10,28 +10,43 @@ class GeoZoneSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::where('role', 'administrator_sistem')->first();
+        // ✅ 1. Ambil user berdasarkan username (menghindari error kolom 'role' yang sudah dihapus)
+        $user = User::where('username', 'admin')->first() ?? User::first();
+        $userId = $user ? $user->user_id : null;
 
-        $zones = [
-            ['name' => 'Zona Konservasi Utara', 'type' => 'koridor_ekologis', 'lat' => 3.671430, 'lon' => 97.878119, 'r' => 2.313],
-            ['name' => 'Zona Perkebunan Tengah', 'type' => 'perkebunan', 'lat' => 3.747409, 'lon' => 97.969478, 'r' => 1.271],
-            ['name' => 'Zona Permukiman Selatan', 'type' => 'permukiman', 'lat' => 3.674023, 'lon' => 97.433463, 'r' => 1.363],
-            ['name' => 'Zona Jalan Raya Timur', 'type' => 'jalan_raya', 'lat' => 3.918911, 'lon' => 97.535144, 'r' => 1.514],
-            ['name' => 'Zona Hutan Lindung Barat', 'type' => 'koridor_ekologis', 'lat' => 3.621963, 'lon' => 97.818243, 'r' => 2.471],
+        // ⚠️ 2. PERHATIAN: Error sebelumnya mengatakan kolom 'name' tidak ada.
+        // Kemungkinan besar di migrasi Anda, kolom ini bernama 'zone_name'.
+        // Jika di migrasi Anda namanya 'name', silakan ubah 'zone_name' di bawah menjadi 'name'.
+        
+        $geoZones = [
+            [
+                'zone_name'  => 'Zona Inti TNGL', 
+                'zone_type'  => 'core',
+                'polygon'    => json_encode([
+                    ['lat' => 3.5, 'lng' => 97.5],
+                    ['lat' => 3.5, 'lng' => 98.5],
+                    ['lat' => 4.5, 'lng' => 98.5],
+                    ['lat' => 4.5, 'lng' => 97.5]
+                ]),
+                'is_active'  => true,
+                'created_by' => $userId,
+            ],
+            [
+                'zone_name'  => 'Zona Penyangga TNGL',
+                'zone_type'  => 'buffer',
+                'polygon'    => json_encode([
+                    ['lat' => 3.0, 'lng' => 97.0],
+                    ['lat' => 3.0, 'lng' => 99.0],
+                    ['lat' => 5.0, 'lng' => 99.0],
+                    ['lat' => 5.0, 'lng' => 97.0]
+                ]),
+                'is_active'  => true,
+                'created_by' => $userId,
+            ],
         ];
 
-        foreach ($zones as $z) {
-            GeoZone::updateOrCreate(
-                ['zone_name' => $z['name']],
-                [
-                    'zone_name' => $z['name'],
-                    'zone_type' => $z['type'],
-                    'center_lat' => $z['lat'],
-                    'center_lon' => $z['lon'],
-                    'radius_km' => $z['r'],
-                    'created_by' => $admin?->user_id,
-                ]
-            );
+        foreach ($geoZones as $zone) {
+            GeoZone::create($zone);
         }
     }
 }

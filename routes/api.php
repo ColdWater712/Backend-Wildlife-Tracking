@@ -24,9 +24,10 @@ use Illuminate\Support\Facades\Route;
 // PUBLIC ROUTES
 // ==========================================
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']);
 
 // ==========================================
-// PROTECTED ROUTES
+// PROTECTED ROUTES (Semua butuh auth)
 // ==========================================
 Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(function () {
 
@@ -39,18 +40,28 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
 
     // --- Dashboard ---
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+    Route::get('/dashboard/charts', [DashboardController::class, 'charts']);
 
-    // --- Users ---
+    // ==========================================
+    // USERS (Admin only untuk write)
+    // ==========================================
     Route::get('users', [UserController::class, 'index']);
     Route::get('users/{id}', [UserController::class, 'show']);
+    Route::get('users/{id}/activity', [UserController::class, 'userActivity']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
-        Route::apiResource('users', UserController::class)->except('index', 'show');
+        Route::post('users', [UserController::class, 'store']);
+        Route::put('users/{id}', [UserController::class, 'update']);
         Route::patch('users/{id}/status', [UserController::class, 'updateStatus']);
+        Route::delete('users/{id}', [UserController::class, 'destroy']);
         Route::get('users/{id}/tokens', [UserController::class, 'getUserTokens']);
         Route::delete('users/{id}/tokens/{tokenId}', [UserController::class, 'revokeUserToken']);
     });
 
-    // --- Roles & Permissions ---
+    // ==========================================
+    // ROLES & PERMISSIONS (Admin only)
+    // ==========================================
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('permissions', PermissionController::class);
@@ -60,20 +71,27 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('roles/{id}/permissions/{permissionId}', [RoleController::class, 'revokePermission']);
     });
 
-    // --- Species ---
+    // ==========================================
+    // SPECIES (Read all, Write admin)
+    // ==========================================
     Route::get('species', [SpeciesController::class, 'index']);
     Route::get('species/{id}', [SpeciesController::class, 'show']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('species', [SpeciesController::class, 'store']);
         Route::put('species/{id}', [SpeciesController::class, 'update']);
         Route::delete('species/{id}', [SpeciesController::class, 'destroy']);
     });
 
-    // --- Animals ---
+    // ==========================================
+    // ANIMALS (Read all, Write admin)
+    // ==========================================
     Route::get('animals', [AnimalController::class, 'index']);
     Route::get('animals/{id}', [AnimalController::class, 'show']);
     Route::get('animals/{animalId}/track', [GpsReadingController::class, 'byAnimal']);
     Route::get('animals/{animalId}/zone-visits', [AnimalGeoZoneController::class, 'index']);
+    Route::get('animals/{animalId}/incidents', [IncidentReportController::class, 'byAnimal']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('animals', [AnimalController::class, 'store']);
         Route::put('animals/{id}', [AnimalController::class, 'update']);
@@ -81,11 +99,15 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('animals/{id}', [AnimalController::class, 'destroy']);
     });
 
-    // --- Tracking Devices ---
+    // ==========================================
+    // TRACKING DEVICES
+    // ==========================================
     Route::get('devices', [TrackingDeviceController::class, 'index']);
     Route::get('devices/{id}', [TrackingDeviceController::class, 'show']);
     Route::get('devices/{id}/latest-reading', [TrackingDeviceController::class, 'latestReading']);
     Route::get('devices/{deviceId}/gps-readings', [GpsReadingController::class, 'byDevice']);
+    Route::get('devices/{id}/battery-history', [TrackingDeviceController::class, 'batteryHistory']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('devices', [TrackingDeviceController::class, 'store']);
         Route::put('devices/{id}', [TrackingDeviceController::class, 'update']);
@@ -96,42 +118,54 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('devices/{id}', [TrackingDeviceController::class, 'destroy']);
     });
 
-    // --- GPS Readings ---
+    // ==========================================
+    // GPS READINGS
+    // ==========================================
     Route::get('gps-readings', [GpsReadingController::class, 'index']);
     Route::get('gps-readings/{id}', [GpsReadingController::class, 'show']);
     Route::get('gps-readings/{readingId}/weather', [WeatherDataController::class, 'byReading']);
     Route::post('gps-readings', [GpsReadingController::class, 'store']);
     Route::post('gps-readings/bulk', [GpsReadingController::class, 'bulk']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::put('gps-readings/{id}', [GpsReadingController::class, 'update']);
         Route::delete('gps-readings/{id}', [GpsReadingController::class, 'destroy']);
     });
 
-    // --- Geo Zones ---
+    // ==========================================
+    // GEO ZONES
+    // ==========================================
     Route::get('geo-zones', [GeoZoneController::class, 'index']);
     Route::get('geo-zones/{id}', [GeoZoneController::class, 'show']);
     Route::get('geo-zones/{id}/animals', [GeoZoneController::class, 'animals']);
     Route::get('geo-zones/{id}/visits', [GeoZoneController::class, 'visits']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('geo-zones', [GeoZoneController::class, 'store']);
         Route::put('geo-zones/{id}', [GeoZoneController::class, 'update']);
         Route::delete('geo-zones/{id}', [GeoZoneController::class, 'destroy']);
     });
 
-    // --- Animal Geo Zone Visits ---
+    // ==========================================
+    // ANIMAL GEO ZONE VISITS
+    // ==========================================
     Route::get('animal-geo-zone-visits', [AnimalGeoZoneController::class, 'index']);
     Route::get('animal-geo-zone-visits/{id}', [AnimalGeoZoneController::class, 'show']);
     Route::post('animal-geo-zone-visits', [AnimalGeoZoneController::class, 'store']);
     Route::patch('animal-geo-zone-visits/{id}/exit', [AnimalGeoZoneController::class, 'exit']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::put('animal-geo-zone-visits/{id}', [AnimalGeoZoneController::class, 'update']);
         Route::delete('animal-geo-zone-visits/{id}', [AnimalGeoZoneController::class, 'destroy']);
     });
 
-    // --- Incidents ---
+    // ==========================================
+    // INCIDENTS
+    // ==========================================
     Route::get('incidents', [IncidentReportController::class, 'index']);
     Route::get('incidents/{id}', [IncidentReportController::class, 'show']);
     Route::get('incidents/{id}/media', [IncidentReportController::class, 'media']);
+    
     Route::middleware('role:konservasionis_lapangan,peneliti_ekologi,administrator_sistem')->group(function () {
         Route::post('incidents', [IncidentReportController::class, 'store']);
         Route::post('incidents/{id}/media', [IncidentReportController::class, 'uploadMedia']);
@@ -140,28 +174,37 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('incidents/{id}', [IncidentReportController::class, 'destroy']);
     });
 
-    // --- Notifications ---
+    // ==========================================
+    // NOTIFICATIONS
+    // ==========================================
     Route::get('notifications', [NotificationController::class, 'index']);
     Route::get('notifications/{id}', [NotificationController::class, 'show']);
+    Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
     Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
     Route::delete('notifications', [NotificationController::class, 'deleteRead']);
 
-    // --- Weather Data ---
+    // ==========================================
+    // WEATHER DATA
+    // ==========================================
     Route::get('weather-data', [WeatherDataController::class, 'index']);
     Route::get('weather-data/{id}', [WeatherDataController::class, 'show']);
     Route::post('weather-data/ingest', [WeatherDataController::class, 'ingest']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('weather-data', [WeatherDataController::class, 'store']);
         Route::put('weather-data/{id}', [WeatherDataController::class, 'update']);
         Route::delete('weather-data/{id}', [WeatherDataController::class, 'destroy']);
     });
 
-    // --- Aggregate Reports ---
+    // ==========================================
+    // AGGREGATE REPORTS
+    // ==========================================
     Route::get('aggregate-reports', [AggregateReportController::class, 'index']);
     Route::get('aggregate-reports/{id}', [AggregateReportController::class, 'show']);
     Route::get('aggregate-reports/{id}/download', [AggregateReportController::class, 'download']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('aggregate-reports', [AggregateReportController::class, 'store']);
         Route::post('aggregate-reports/generate', [AggregateReportController::class, 'generate']);
@@ -169,9 +212,12 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('aggregate-reports/{id}', [AggregateReportController::class, 'destroy']);
     });
 
-    // --- Activity Log ---
+    // ==========================================
+    // ACTIVITY LOGS (Read all, Write admin)
+    // ==========================================
     Route::get('activity-logs', [ActivityLogController::class, 'index']);
     Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
+    
     Route::middleware('role:administrator_sistem')->group(function () {
         Route::post('activity-logs', [ActivityLogController::class, 'store']);
         Route::put('activity-logs/{id}', [ActivityLogController::class, 'update']);
@@ -179,25 +225,23 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
     });
 
     // ==========================================
-    // ✅ AI PREDICTIONS & SUMMARY (GEMINI)
+    // AI PREDICTIONS & MEDIA (Semua bisa akses)
     // ==========================================
     Route::get('ai-predictions', [AiPredictionController::class, 'index']);
     Route::get('ai-predictions/pending-verification', [AiPredictionController::class, 'pendingVerification']);
     Route::get('ai-predictions/{id}', [AiPredictionController::class, 'show']);
     
-    // Upload & Predict
     Route::post('ai/upload', [AiPredictionController::class, 'upload']);
     Route::post('ai-predictions/{id}/verify', [AiPredictionController::class, 'verify']);
     Route::post('ai-predictions/{id}/retry', [AiPredictionController::class, 'retry']);
     
-    // Media Management
     Route::get('media-uploads', [AiPredictionController::class, 'mediaUploads']);
     Route::get('media-uploads/{id}', [AiPredictionController::class, 'showMedia']);
     Route::get('media-uploads/{id}/file', [AiPredictionController::class, 'file']);
     Route::post('media-uploads/{id}/predictions', [AiPredictionController::class, 'triggerPrediction']);
     Route::get('media-uploads/{id}/predictions', [AiPredictionController::class, 'getMediaPredictions']);
     
-    // ✅ ROUTE BARU: AI Summary, Health Check, Detect Objects
+    // AI Summary, Health Check, Detect Objects
     Route::get('ai/summary-report', [AiPredictionController::class, 'generateSummaryReport']);
     Route::get('ai/health', [AiPredictionController::class, 'aiHealthCheck']);
     Route::post('ai/detect-objects', [AiPredictionController::class, 'detectObjects']);
@@ -208,10 +252,16 @@ Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(functi
         Route::delete('media-uploads/{id}', [AiPredictionController::class, 'destroyMedia']);
     });
 
-    // --- Export ---
+    // ==========================================
+    // EXPORT ENDPOINTS
+    // ==========================================
     Route::get('export/gps/csv', [ExportController::class, 'exportGpsCsv']);
     Route::get('export/gps/geojson', [ExportController::class, 'exportGpsGeoJson']);
     Route::get('export/animals/csv', [ExportController::class, 'exportAnimalsCsv']);
     Route::get('export/incidents/csv', [ExportController::class, 'exportIncidentsCsv']);
     Route::get('export/devices/csv', [ExportController::class, 'exportDevicesCsv']);
+    Route::get('export/species/csv', [ExportController::class, 'exportSpeciesCsv']);
+    Route::get('export/weather/csv', [ExportController::class, 'exportWeatherCsv']);
+    Route::get('export/ai-predictions/csv', [ExportController::class, 'exportAiPredictionsCsv']);
+    Route::get('export/aggregate-report/{id}', [ExportController::class, 'exportAggregateReport']);
 });

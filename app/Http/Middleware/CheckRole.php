@@ -8,26 +8,40 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckRole
 {
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  string  ...$roles
+     * @return \Symfony\Component\HttpFoundation\Response
+     */
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
 
-<<<<<<< HEAD
-        // Load relasi role jika belum di-load (untuk efisiensi)
-        if (!$request->user()->relationLoaded('role')) {
-            $request->user()->load('role');
-        }
-
-        // Cek apakah role_name user ada di dalam array $roles yang diizinkan
-        if (!in_array($request->user()->role->role_name, $roles)) {
-=======
-        if (!$user || !in_array($user->role, $roles, true)) {
->>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
+        // 1. Cek apakah user sudah login
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda tidak memiliki hak akses untuk aksi ini.',
-                'data' => null,
-                'errors' => null,
+                'message' => 'Unauthenticated. Silakan login terlebih dahulu.',
+            ], 401);
+        }
+
+        // 2. Load relasi role jika belum di-load (untuk efisiensi query)
+        if (!$user->relationLoaded('role')) {
+            $user->load('role');
+        }
+
+        // 3. Ambil nama role user (sesuaikan dengan nama kolom di tabel roles Anda)
+        // Biasanya 'name_role' atau 'name' atau 'role_name'
+        $userRole = $user->role->name_role ?? $user->role->name ?? $user->role->role_name ?? null;
+
+        // 4. Cek apakah role user ada di dalam daftar role yang diizinkan
+        if (!$userRole || !in_array($userRole, $roles)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Forbidden. Anda tidak memiliki akses untuk fitur ini. (Required: ' . implode(', ', $roles) . ')',
             ], 403);
         }
 
