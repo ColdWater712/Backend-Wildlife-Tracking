@@ -13,14 +13,26 @@ class GpsReadingController extends Controller
 
     public function index(Request $request)
     {
-        $query = GpsReading::with(['animal', 'device', 'weather']);
+        $query = GpsReading::with(['device.animal', 'weatherData']);
 
-        if ($request->filled('animal_id')) $query->where('animal_id', $request->animal_id);
-        if ($request->filled('device_id')) $query->where('device_id', $request->device_id);
-        if ($request->filled('start_date')) $query->where('recorded_at', '>=', $request->start_date);
-        if ($request->filled('end_date')) $query->where('recorded_at', '<=', $request->end_date);
-        if ($request->filled('min_altitude')) $query->where('altitude', '>=', $request->min_altitude);
-        if ($request->filled('max_altitude')) $query->where('altitude', '<=', $request->max_altitude);
+        if ($request->filled('animal_id')) {
+            $query->whereHas('device', fn($q) => $q->where('animal_id', $request->animal_id));
+        }
+        if ($request->filled('device_id')) {
+            $query->where('device_id', $request->device_id);
+        }
+        if ($request->filled('start_date')) {
+            $query->where('recorded_at', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->where('recorded_at', '<=', $request->end_date);
+        }
+        if ($request->filled('min_altitude')) {
+            $query->where('altitude_meters', '>=', $request->min_altitude);
+        }
+        if ($request->filled('max_altitude')) {
+            $query->where('altitude_meters', '<=', $request->max_altitude);
+        }
 
         $query->orderBy('recorded_at', 'desc');
 
@@ -30,45 +42,46 @@ class GpsReadingController extends Controller
     public function show($id)
     {
         return $this->success(
-            GpsReading::with(['animal', 'device', 'weather'])->findOrFail($id)
+            GpsReading::with(['device.animal', 'weatherData'])->findOrFail($id),
         );
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'animal_id'      => 'required|exists:animals,animal_id',
-            'device_id'      => 'required|exists:tracking_devices,device_id',
-            'latitude'       => 'required|numeric',
-            'longitude'      => 'required|numeric',
-            'altitude'       => 'nullable|numeric',
-            'recorded_at'    => 'required|date',
-            'battery_level'  => 'nullable|numeric|between:0,100',
-            'signal_strength' => 'nullable|numeric',
+        $data = $request->validate([
+            'device_id' => 'required|exists:tracking_devices,device_id',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'recorded_at' => 'required|date',
+            'altitude_meters' => 'nullable|numeric',
+            'accuracy_meters' => 'nullable|numeric|min:0',
         ]);
 
-        $reading = GpsReading::create($request->only([
-            'animal_id', 'device_id', 'latitude', 'longitude', 'altitude',
-            'recorded_at', 'battery_level', 'signal_strength'
-        ]));
+        $reading = $this->createReading($data);
 
-        return $this->success($reading->load(['animal', 'device']), 'GPS reading berhasil dibuat', 201);
+        return $this->success(
+            $reading->load(['device.animal', 'weatherData']),
+            'GPS reading berhasil dibuat',
+            201,
+        );
     }
 
     public function bulk(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'readings' => 'required|array',
-            'readings.*.animal_id' => 'required|exists:animals,animal_id',
             'readings.*.device_id' => 'required|exists:tracking_devices,device_id',
-            'readings.*.latitude' => 'required|numeric',
-            'readings.*.longitude' => 'required|numeric',
+            'readings.*.latitude' => 'required|numeric|between:-90,90',
+            'readings.*.longitude' => 'required|numeric|between:-180,180',
             'readings.*.recorded_at' => 'required|date',
+            'readings.*.altitude_meters' => 'nullable|numeric',
+            'readings.*.accuracy_meters' => 'nullable|numeric|min:0',
         ]);
 
         $created = [];
-        foreach ($request->readings as $data) {
-            $created[] = GpsReading::create($data);
+
+        foreach ($validated['readings'] as $data) {
+            $created[] = $this->createReading($data);
         }
 
         return $this->success($created, count($created) . ' GPS readings berhasil dibuat', 201);
@@ -77,39 +90,63 @@ class GpsReadingController extends Controller
     public function update(Request $request, $id)
     {
         $reading = GpsReading::findOrFail($id);
-        $request->validate([
-            'latitude'  => 'sometimes|numeric',
-            'longitude' => 'sometimes|numeric',
-            'altitude'  => 'nullable|numeric',
+        $data = $request->validate([
+            'latitude' => 'sometimes|numeric|between:-90,90',
+            'longitude' => 'sometimes|numeric|between:-180,180',
+            'recorded_at' => 'sometimes|date',
+            'altitude_meters' => 'nullable|numeric',
+            'accuracy_meters' => 'nullable|numeric|min:0',
         ]);
 
-        $reading->update($request->only(['latitude', 'longitude', 'altitude']));
-        return $this->success($reading->fresh(['animal', 'device']), 'GPS reading diperbarui');
+        $reading->update($data);
+
+        return $this->success(
+            $reading->fresh(['device.animal', 'weatherData']),
+            'GPS reading diperbarui',
+        );
     }
 
     public function destroy($id)
     {
         GpsReading::findOrFail($id)->delete();
+
         return $this->success(null, 'GPS reading dihapus');
     }
 
     public function byAnimal($animalId)
     {
-        $readings = GpsReading::where('animal_id', $animalId)
-            ->with(['device'])
+        $readings = GpsReading::whereHas('device', fn($q) => $q->where('animal_id', $animalId))
+            ->with(['device.animal'])
             ->orderBy('recorded_at', 'desc')
             ->limit(1000)
             ->get();
+
         return $this->list($readings);
     }
 
     public function byDevice($deviceId)
     {
         $readings = GpsReading::where('device_id', $deviceId)
-            ->with(['animal'])
+            ->with(['device.animal'])
             ->orderBy('recorded_at', 'desc')
             ->limit(1000)
             ->get();
+
         return $this->list($readings);
+    }
+
+    private function createReading(array $data): GpsReading
+    {
+        $payload = [
+            'device_id' => $data['device_id'],
+            'latitude' => $data['latitude'],
+            'longitude' => $data['longitude'],
+            'recorded_at' => $data['recorded_at'],
+            'altitude_meters' => $data['altitude_meters'] ?? null,
+            'accuracy_meters' => $data['accuracy_meters'] ?? null,
+        ];
+        $payload['checksum'] = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+
+        return GpsReading::create($payload);
     }
 }

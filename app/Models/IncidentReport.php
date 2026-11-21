@@ -17,8 +17,23 @@ class IncidentReport extends Model
         'location', 'animal_id', 'species_id', 'reported_by', 'status', 'sync_status',
     ];
 
-    // ✅ 3 BARIS INI YANG SELAMA INI HILANG DAN MENYEBABKAN ERROR
-    public function animal() { return $this->belongsTo(Animal::class, 'animal_id', 'animal_id'); }
-    public function species() { return $this->belongsTo(Species::class, 'species_id', 'species_id'); }
-    public function reporter() { return $this->belongsTo(User::class, 'reported_by', 'user_id'); }
+    public function animal()
+    {
+        return $this->belongsTo(Animal::class, 'animal_id', 'animal_id');
+    }
+
+    public function species()
+    {
+        return $this->belongsTo(Species::class, 'species_id', 'species_id');
+    }
+
+    public function reporter()
+    {
+        return $this->belongsTo(User::class, 'reported_by', 'user_id');
+    }
+
+    public function media()
+    {
+        return $this->hasMany(AiMediaUpload::class, 'report_id', 'report_id');
+    }
 }

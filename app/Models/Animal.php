@@ -35,9 +35,26 @@ class Animal extends Model
         return $this->hasOne(TrackingDevice::class, 'animal_id', 'animal_id');
     }
 
+    public function gpsReadings()
+    {
+        return $this->hasManyThrough(
+            GpsReading::class,
+            TrackingDevice::class,
+            'animal_id',
+            'device_id',
+            'animal_id',
+            'device_id',
+        );
+    }
+
     public function geoZoneVisits()
     {
         return $this->hasMany(AnimalGeoZone::class, 'animal_id', 'animal_id');
+    }
+
+    public function incidents()
+    {
+        return $this->hasMany(IncidentReport::class, 'animal_id', 'animal_id');
     }
 
     public function notifications()

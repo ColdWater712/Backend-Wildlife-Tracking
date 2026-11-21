@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ApiResponse;
+use App\Models\AnimalGeoZone;
 use App\Models\GeoZone;
-use App\Models\AnimalGeoZoneVisit;
 use Illuminate\Http\Request;
 
 class GeoZoneController extends Controller
@@ -14,40 +14,40 @@ class GeoZoneController extends Controller
 
     public function index(Request $request)
     {
-        $query = GeoZone::withCount('visits');
+        $query = GeoZone::withCount('animalVisits');
 
-        if ($request->filled('zone_type')) $query->where('zone_type', $request->zone_type);
-        if ($request->filled('is_active')) $query->where('is_active', $request->is_active);
+        if ($request->filled('zone_type')) {
+            $query->where('zone_type', $request->zone_type);
+        }
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where('name', 'like', "%{$search}%");
+            $query->where('zone_name', 'like', "%{$search}%");
         }
 
-        $query->orderBy('name', 'asc');
+        $query->orderBy('zone_name', 'asc');
 
         return $this->list($query, 'OK', $request);
     }
 
     public function show($id)
     {
-        return $this->success(GeoZone::withCount('visits')->findOrFail($id));
+        return $this->success(GeoZone::withCount('animalVisits')->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'name'      => 'required|string|max:100',
-            'zone_type' => 'required|string',
-            'polygon'   => 'required|json',
-            'is_active' => 'boolean',
+        $data = $request->validate([
+            'zone_name' => 'required|string|max:150',
+            'zone_type' => 'required|string|max:50',
+            'center_lat' => 'nullable|numeric|between:-90,90',
+            'center_lon' => 'nullable|numeric|between:-180,180',
+            'radius_km' => 'nullable|numeric|min:0',
+            'polygon_geojson' => 'nullable|json',
         ]);
 
-        $zone = GeoZone::create([
-            'name'      => $request->name,
-            'zone_type' => $request->zone_type,
-            'polygon'   => $request->polygon,
-            'is_active' => $request->input('is_active', true),
-        ]);
+        $data['created_by'] = $request->user()->user_id;
+
+        $zone = GeoZone::create($data);
 
         return $this->success($zone, 'Geo zone berhasil dibuat', 201);
     }
@@ -55,40 +55,48 @@ class GeoZoneController extends Controller
     public function update(Request $request, $id)
     {
         $zone = GeoZone::findOrFail($id);
-        $request->validate([
-            'name'      => 'sometimes|string|max:100',
-            'zone_type' => 'sometimes|string',
-            'polygon'   => 'sometimes|json',
-            'is_active' => 'boolean',
+        $data = $request->validate([
+            'zone_name' => 'sometimes|string|max:150',
+            'zone_type' => 'sometimes|string|max:50',
+            'center_lat' => 'nullable|numeric|between:-90,90',
+            'center_lon' => 'nullable|numeric|between:-180,180',
+            'radius_km' => 'nullable|numeric|min:0',
+            'polygon_geojson' => 'nullable|json',
         ]);
 
-        $zone->update($request->only(['name', 'zone_type', 'polygon', 'is_active']));
+        $zone->update($data);
+
         return $this->success($zone->fresh(), 'Geo zone diperbarui');
     }
 
     public function destroy($id)
     {
         GeoZone::findOrFail($id)->delete();
+
         return $this->success(null, 'Geo zone dihapus');
     }
 
     public function animals($id)
     {
-        $zone = GeoZone::findOrFail($id);
-        $visits = AnimalGeoZoneVisit::where('zone_id', $id)
-            ->with(['animal.species'])
+        $visits = AnimalGeoZone::where('zone_id', $id)
+            ->with('animal.species')
             ->get();
-        
-        $uniqueAnimals = $visits->pluck('animal')->unique('animal_id')->values();
+
+        $uniqueAnimals = $visits->pluck('animal')
+            ->filter()
+            ->unique('animal_id')
+            ->values();
+
         return $this->list($uniqueAnimals);
     }
 
     public function visits($id)
     {
-        $visits = AnimalGeoZoneVisit::where('zone_id', $id)
-            ->with(['animal.species'])
+        $visits = AnimalGeoZone::where('zone_id', $id)
+            ->with('animal.species')
             ->orderBy('entered_at', 'desc')
             ->get();
+
         return $this->list($visits);
     }
 }

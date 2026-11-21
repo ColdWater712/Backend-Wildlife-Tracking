@@ -99,7 +99,7 @@ class IncidentReportController extends Controller
     public function updateSyncStatus(Request $request, $id)
     {
         $incident = IncidentReport::findOrFail($id);
-        $request->validate(['sync_status' => 'required|in:synced,pending,failed']);
+        $request->validate(['sync_status' => 'required|in:synced,pending_sync,failed']);
         $incident->update(['sync_status' => $request->sync_status]);
         return $this->success($incident->fresh(), 'Sync status diperbarui');
     }

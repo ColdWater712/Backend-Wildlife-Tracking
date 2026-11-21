@@ -32,6 +32,18 @@ class GpsReading extends Model
         return $this->belongsTo(TrackingDevice::class, 'device_id', 'device_id');
     }
 
+    public function animal()
+    {
+        return $this->hasOneThrough(
+            Animal::class,
+            TrackingDevice::class,
+            'device_id',
+            'animal_id',
+            'device_id',
+            'animal_id',
+        );
+    }
+
     public function weatherData()
     {
         return $this->hasOne(WeatherData::class, 'reading_id', 'reading_id');
