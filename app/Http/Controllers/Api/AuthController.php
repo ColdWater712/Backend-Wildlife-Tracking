@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function login(LoginRequest $request)
+        public function login(LoginRequest $request)
     {
         $throttleKey = strtolower($request->input('email')) . '|' . $request->ip();
 
@@ -25,7 +25,8 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $user = User::where('email', $request->email)->first();
+        // 1. PERBAIKAN: Tambahkan ->with('role') untuk eager loading
+        $user = User::with('role')->where('email', $request->email)->first();
 
         $passwordValid = $user && Hash::check($request->password, $user->password);
 
@@ -55,7 +56,8 @@ class AuthController extends Controller
                     'user_id' => $user->user_id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'role' => $user->role,
+                    // 2. PERBAIKAN: Ambil role_name dari relasi, fallback ke null jika tidak ada
+                    'role' => $user->role ? $user->role->role_name : null,
                 ],
                 'token' => $token,
             ],

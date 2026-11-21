@@ -14,7 +14,13 @@ class CheckRole
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        if (!in_array($request->user()->role, $roles)) {
+        // Load relasi role jika belum di-load (untuk efisiensi)
+        if (!$request->user()->relationLoaded('role')) {
+            $request->user()->load('role');
+        }
+
+        // Cek apakah role_name user ada di dalam array $roles yang diizinkan
+        if (!in_array($request->user()->role->role_name, $roles)) {
             return response()->json([
                 'message' => 'Anda tidak memiliki akses untuk fitur ini.'
             ], 403);

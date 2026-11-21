@@ -14,7 +14,8 @@ class User extends Authenticatable
     protected $primaryKey = 'user_id';
     const UPDATED_AT = null; 
 
-    protected $fillable = ['name', 'email', 'password', 'role'];
+    // GANTI 'role' menjadi 'role_id'
+    protected $fillable = ['name', 'email', 'password', 'role_id'];
     protected $hidden = ['password'];
 
     protected function casts(): array
@@ -22,5 +23,11 @@ class User extends Authenticatable
         return [
             'created_at' => 'datetime',
         ];
+    }
+
+    // TAMBAHKAN relasi ke model Role
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id', 'role_id');
     }
 }
