@@ -1,16 +1,38 @@
 <?php
-namespace Database\Seeders;
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
-class AnimalSeeder extends Seeder {
-    public function run(): void {
-        DB::table('animals')->insert([
-            ['animal_id' => 1, 'species_id' => 1, 'name' => 'SATWA-742', 'birth_date' => '2023-08-04', 'gender' => 'male', 'is_active' => 1],
-            ['animal_id' => 2, 'species_id' => 2, 'name' => 'SATWA-281', 'birth_date' => '2019-12-28', 'gender' => 'unknown', 'is_active' => 1],
-            ['animal_id' => 3, 'species_id' => 3, 'name' => 'SATWA-803', 'birth_date' => '2019-11-21', 'gender' => 'female', 'is_active' => 1],
-            ['animal_id' => 4, 'species_id' => 4, 'name' => 'SATWA-387', 'birth_date' => '2022-03-18', 'gender' => 'female', 'is_active' => 1],
-            ['animal_id' => 5, 'species_id' => 5, 'name' => 'SATWA-968', 'birth_date' => '2014-02-14', 'gender' => 'female', 'is_active' => 1],
-        ]);
+namespace Database\Seeders;
+
+use App\Models\Animal;
+use App\Models\Species;
+use Illuminate\Database\Seeder;
+
+class AnimalSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $data = [
+            ['code' => 'ORN-01', 'species' => 'Pongo abelii', 'birth_date' => '2023-08-04', 'gender' => 'male'],
+            ['code' => 'ORN-02', 'species' => 'Pongo abelii', 'birth_date' => '2020-05-12', 'gender' => 'female'],
+            ['code' => 'HRM-01', 'species' => 'Panthera tigris sumatrae', 'birth_date' => '2019-12-28', 'gender' => 'unknown'],
+            ['code' => 'BDK-01', 'species' => 'Dicerorhinus sumatrensis', 'birth_date' => '2019-11-21', 'gender' => 'female'],
+            ['code' => 'GJS-01', 'species' => 'Elephas maximus sumatranus', 'birth_date' => '2022-03-18', 'gender' => 'female'],
+            ['code' => 'RSA-01', 'species' => 'Rusa unicolor', 'birth_date' => '2014-02-14', 'gender' => 'female'],
+        ];
+
+        foreach ($data as $row) {
+            $species = Species::where('scientific_name', $row['species'])->first();
+            if (!$species) continue;
+
+            Animal::updateOrCreate(
+                ['name' => $row['code']],
+                [
+                    'species_id' => $species->species_id,
+                    'name' => $row['code'],
+                    'birth_date' => $row['birth_date'],
+                    'gender' => $row['gender'],
+                    'is_active' => true,
+                ]
+            );
+        }
     }
 }

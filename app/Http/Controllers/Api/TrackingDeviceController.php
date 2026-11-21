@@ -3,74 +3,149 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTrackingDeviceRequest;
+use App\Http\Requests\UpdateTrackingDeviceRequest;
+use App\Http\Traits\ApiResponse;
 use App\Models\TrackingDevice;
 use Illuminate\Http\Request;
 
 class TrackingDeviceController extends Controller
 {
+    use ApiResponse;
+
     public function index(Request $request)
     {
-        $query = TrackingDevice::with(['animal.species']);
+        $query = TrackingDevice::with(['animal.species', 'latestReading']);
 
-        if ($request->has('device_condition') && $request->device_condition !== 'all') {
+        if ($request->filled('device_condition') && $request->device_condition !== 'all') {
             $query->where('device_condition', $request->device_condition);
         }
-
-        if ($request->has('is_active')) {
-            $isActive = filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN);
-            $query->where('is_active', $isActive);
+        if ($request->has('is_active') && $request->input('is_active') !== 'all') {
+            $val = $request->input('is_active');
+            $query->where('is_active', in_array(strtolower((string)$val), ['1','true','aktif','active','ya','yes']));
+        }
+        if ($request->filled('battery_below')) $query->where('battery_level', '<', (int) $request->battery_below);
+        if ($request->filled('animal_id'))     $query->where('animal_id', $request->animal_id);
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(fn($q) => $q->where('model', 'like', "%{$s}%")
+                ->orWhereHas('animal', fn($aq) => $aq->where('name', 'like', "%{$s}%")));
         }
 
-        if ($request->has('search') && !empty($request->search)) {
-            $search = $request->search;
-            $query->whereHas('animal', function ($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%');
-            });
-        }
+        $query->orderBy($request->input('orderBy', 'device_id'), $request->input('order', 'asc'));
 
-        $devices = $query->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $devices,
-        ], 200);
-    }
-
-    public function store(Request $request)
-    {
-        $request->validate([
-            'animal_id' => 'nullable|integer|exists:animals,animal_id|unique:tracking_devices,animal_id',
-            'model' => 'required|string|max:100|regex:/^[a-zA-Z0-9\s\-]+$/',
-            'installation_date' => 'nullable|date|before_or_equal:today',
-            'battery_life_months' => 'nullable|integer|min:1|max:60',
-            'battery_level' => 'nullable|integer|min:0|max:100',
-            'signal_strength' => 'nullable|integer|min:0|max:5',
-            'device_condition' => 'required|in:normal,damaged,lost',
-        ], [
-            'model.regex' => 'Model hanya boleh berisi huruf, angka, spasi, dan strip.',
-            'battery_level.max' => 'Baterai maksimal 100%.',
-            'signal_strength.max' => 'Sinyal maksimal 5.',
-        ]);
-
-        $validated = $request->validated();
-        $validated['is_active'] = true;
-
-        $device = TrackingDevice::create($validated);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Perangkat pelacak berhasil ditambahkan',
-            'data' => $device,
-        ], 201);
+        // ✅ FE tracking-device.service pakai unwrapData → array
+        return $this->list($query->get());
     }
 
     public function show($id)
     {
-        $device = TrackingDevice::with(['animal.species', 'gpsReadings'])->findOrFail($id);
+        return $this->success(TrackingDevice::with(['animal.species', 'gpsReadings'])->findOrFail($id));
+    }
 
-        return response()->json([
-            'success' => true,
-            'data' => $device,
-        ], 200);
+    public function store(StoreTrackingDeviceRequest $request)
+    {
+        $device = TrackingDevice::create($request->validated());
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'CREATE_DEVICE',
+            'details' => json_encode(['device_id' => $device->device_id]), 'timestamp' => now(),
+        ]);
+
+        return $this->success($device->load('animal'), 'Perangkat berhasil dibuat', 201);
+    }
+
+    public function update(UpdateTrackingDeviceRequest $request, $id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $device->update($request->validated());
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE',
+            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
+        ]);
+
+        return $this->success($device->fresh()->load('animal'), 'Perangkat diperbarui');
+    }
+
+public function assignAnimal(Request $request, $id)
+{
+    $request->validate(['animal_id' => 'required|integer|exists:animals,animal_id']);
+    $device = TrackingDevice::findOrFail($id);
+
+    $existing = TrackingDevice::where('animal_id', $request->animal_id)->where('device_id', '!=', $id)->first();
+    if ($existing) return $this->error('Satwa ini sudah memiliki perangkat lain', 422);
+
+    // ✅ G-2: transaction update device + audit
+    DB::transaction(function () use ($device, $request) {
+        $device->update(['animal_id' => $request->animal_id]);
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id,
+            'action' => 'ASSIGN_DEVICE',
+            'details' => json_encode(['device_id' => $device->device_id, 'animal_id' => $request->animal_id]),
+            'timestamp' => now(),
+        ]);
+    });
+
+    return $this->success($device->fresh()->load('animal'), 'Perangkat dipasangkan ke satwa');
+}
+
+    public function unassignAnimal($id)
+    {
+        $device = TrackingDevice::findOrFail($id);
+        $device->update(['animal_id' => null]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(), 'action' => 'UNASSIGN_DEVICE',
+            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
+        ]);
+
+        return $this->success($device->fresh(), 'Perangkat dilepas dari satwa');
+    }
+
+    public function updateCondition(Request $request, $id)
+    {
+        $request->validate(['device_condition' => 'required|in:normal,damaged,lost']);
+        $device = TrackingDevice::findOrFail($id);
+        $device->update(['device_condition' => $request->device_condition]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE_CONDITION',
+            'details' => json_encode(['device_id' => $id, 'condition' => $request->device_condition]), 'timestamp' => now(),
+        ]);
+
+        return $this->success($device->fresh(), 'Kondisi perangkat diperbarui');
+    }
+
+    public function updateStatus(Request $request, $id)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+        $device = TrackingDevice::findOrFail($id);
+        $device->update(['is_active' => $request->boolean('is_active')]);
+
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_DEVICE_STATUS',
+            'details' => json_encode(['device_id' => $id, 'is_active' => $device->is_active]), 'timestamp' => now(),
+        ]);
+
+        return $this->success($device->fresh(), 'Status perangkat diperbarui');
+    }
+
+    public function latestReading($id)
+    {
+        $device = TrackingDevice::with('latestReading')->findOrFail($id);
+        return $this->success($device->latestReading);
+    }
+
+    public function destroy($id)
+    {
+        TrackingDevice::findOrFail($id)->delete();
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(), 'action' => 'DELETE_DEVICE',
+            'details' => json_encode(['device_id' => $id]), 'timestamp' => now(),
+        ]);
+
+        return $this->success(null, 'Perangkat dihapus');
     }
 }

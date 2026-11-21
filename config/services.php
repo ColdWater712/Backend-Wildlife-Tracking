@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    // Konfigurasi untuk AI Microservice (Python FastAPI + YOLOv8)
+    'ai' => [
+        'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8001'),
+    ],
+
 ];

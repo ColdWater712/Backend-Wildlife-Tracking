@@ -12,12 +12,8 @@ class Notification extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'notification_type',
-        'message',
-        'animal_id',
-        'zone_id',
-        'device_id',
-        'is_read',
+        'user_id', 'notification_type', 'message',
+        'animal_id', 'zone_id', 'device_id', 'is_read',
     ];
 
     protected function casts(): array
@@ -31,5 +27,20 @@ class Notification extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
+
+    public function animal()
+    {
+        return $this->belongsTo(Animal::class, 'animal_id', 'animal_id');
+    }
+
+    public function zone()
+    {
+        return $this->belongsTo(GeoZone::class, 'zone_id', 'zone_id');
+    }
+
+    public function device()
+    {
+        return $this->belongsTo(TrackingDevice::class, 'device_id', 'device_id');
     }
 }

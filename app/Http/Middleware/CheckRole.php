@@ -8,12 +8,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckRole
 {
-    public function handle(Request $request, Closure $next, ...$roles): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        if (!$request->user()) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
-        }
+        $user = $request->user();
 
+<<<<<<< HEAD
         // Load relasi role jika belum di-load (untuk efisiensi)
         if (!$request->user()->relationLoaded('role')) {
             $request->user()->load('role');
@@ -21,8 +20,14 @@ class CheckRole
 
         // Cek apakah role_name user ada di dalam array $roles yang diizinkan
         if (!in_array($request->user()->role->role_name, $roles)) {
+=======
+        if (!$user || !in_array($user->role, $roles, true)) {
+>>>>>>> 8e7e8e56ec983b5e0342baf64cb79f61cc79443d
             return response()->json([
-                'message' => 'Anda tidak memiliki akses untuk fitur ini.'
+                'success' => false,
+                'message' => 'Anda tidak memiliki hak akses untuk aksi ini.',
+                'data' => null,
+                'errors' => null,
             ], 403);
         }
 

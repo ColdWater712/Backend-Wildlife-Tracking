@@ -16,8 +16,8 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email|max:150',
-            'password' => 'required|string|max:255',
+            'email' => 'required|email',
+            'password' => 'required|string',
         ];
     }
 
@@ -26,9 +26,7 @@ class LoginRequest extends FormRequest
         return [
             'email.required' => 'Email wajib diisi.',
             'email.email' => 'Format email tidak valid.',
-            'email.max' => 'Email maksimal 150 karakter.',
             'password.required' => 'Password wajib diisi.',
-            'password.max' => 'Password maksimal 255 karakter.',
         ];
     }
 
@@ -37,6 +35,7 @@ class LoginRequest extends FormRequest
         throw new HttpResponseException(response()->json([
             'success' => false,
             'message' => $validator->errors()->first(),
+            'data' => null,
             'errors' => $validator->errors(),
         ], 422));
     }
