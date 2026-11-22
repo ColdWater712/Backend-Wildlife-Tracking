@@ -26,3 +26,7 @@ npm-debug.log
 yarn-error.log
 .idea/
 .vscode/
+
+# Local AI assistant files
+CLAUDE.md
+.claude/
