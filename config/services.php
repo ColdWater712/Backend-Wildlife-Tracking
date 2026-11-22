@@ -35,9 +35,26 @@ return [
         ],
     ],
 
-    // Konfigurasi untuk AI Microservice (Python FastAPI + YOLOv8)
-    'ai' => [
-        'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8001'),
+    // Groq (vision, text, dan Whisper untuk transkripsi audio)
+    'groq' => [
+        'key' => env('GROQ_API_KEY', ''),
+        'vision_model' => env('GROQ_VISION_MODEL', 'qwen/qwen3.8-27b'),
+        'text_model' => env('GROQ_TEXT_MODEL', 'qwen/qwen3.8-27b'),
+        'audio_model' => env('GROQ_AUDIO_MODEL', 'whisper-large-v3-turbo'),
+        'timeout' => (int) env('GROQ_TIMEOUT', 60),
+    ],
+
+    // Opsional: microservice klasifikasi audio (YAMNet / BirdNET / PANNs, dsb.)
+    // Kontrak: POST {url}/classify-audio (multipart "file") -> {label, confidence, category?, species?}
+    'ai_audio' => [
+        'url' => env('AI_AUDIO_SERVICE_URL'),
+        'model' => env('AI_AUDIO_SERVICE_MODEL', 'audio-classifier'),
+        'timeout' => (int) env('AI_AUDIO_SERVICE_TIMEOUT', 60),
+    ],
+
+    // Dipakai untuk mengambil frame dari video kamera jebak
+    'ffmpeg' => [
+        'path' => env('FFMPEG_PATH', 'ffmpeg'),
     ],
 
 ];
