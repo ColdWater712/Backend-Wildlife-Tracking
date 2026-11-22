@@ -7,6 +7,10 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Mencatat setiap request tulis (POST/PUT/PATCH/DELETE) yang berhasil ke activity_log.
+ * Isi body tidak dicatat agar password/token tidak bocor ke log.
+ */
 class LogActivity
 {
     public function handle(Request $request, Closure $next): Response
@@ -14,15 +18,11 @@ class LogActivity
         $response = $next($request);
 
         if ($request->user() && $response->isSuccessful() && $this->isWriteAction($request)) {
-            ActivityLog::create([
-                'user_id' => $request->user()->user_id,
-                'action' => $this->deriveAction($request),
-                'details' => json_encode([
-                    'method' => $request->method(),
-                    'path' => $request->path(),
-                    'status' => $response->getStatusCode(),
-                ]),
-                'timestamp' => now(),
+            ActivityLog::record($request->user()->user_id, $this->deriveAction($request), [
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'status' => $response->getStatusCode(),
+                'ip' => $request->ip(),
             ]);
         }
 
@@ -37,15 +37,13 @@ class LogActivity
     private function deriveAction(Request $request): string
     {
         $path = $request->path();
-        $method = $request->method();
 
         return match (true) {
-            str_contains($path, 'login') => 'LOGIN',
             str_contains($path, 'logout') => 'LOGOUT',
-            $method === 'POST' => 'CREATE',
-            in_array($method, ['PUT', 'PATCH']) => 'UPDATE',
-            $method === 'DELETE' => 'DELETE',
-            default => 'API_ACCESS',
+            str_ends_with($path, '/verify') => 'VERIFY',
+            $request->isMethod('POST') => 'CREATE',
+            $request->isMethod('DELETE') => 'DELETE',
+            default => 'UPDATE',
         };
     }
 }

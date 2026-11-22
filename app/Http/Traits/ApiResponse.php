@@ -2,33 +2,38 @@
 
 namespace App\Http\Traits;
 
+use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 
+/**
+ * Format respons standar: { success, message, data, errors }.
+ * Endpoint list mengembalikan array polos di `data` (sesuai kontrak frontend),
+ * metadata pagination dikirim lewat header X-Total-Count / X-Current-Page / X-Per-Page / X-Last-Page.
+ */
 trait ApiResponse
 {
-    /**
-     * ✅ G-3: Return ARRAY telanjang (compatible FE unwrapData)
-     * TAPI honor ?page & ?per_page untuk slicing server-side.
-     * Tambah header X-Total-Count untuk pagination metadata.
-     */
-    protected function list($queryOrItems = [], string $message = 'OK', Request $request = null): JsonResponse
-    {
-        $items = $queryOrItems;
+    protected int $maxPerPage = 200;
 
-        if ($queryOrItems instanceof \Illuminate\Database\Eloquent\Builder) {
-            if ($request && $request->has('per_page')) {
-                $perPage = (int) $request->input('per_page', 25);
-                $page = (int) $request->input('page', 1);
-                $total = $queryOrItems->count();
-                $items = $queryOrItems->forPage($page, $perPage)->get();
-                return $this->listResponse($items, $total, $page, $perPage, $message);
+    protected function list($queryOrItems = [], string $message = 'OK', ?Request $request = null): JsonResponse
+    {
+        $request ??= request();
+
+        if ($queryOrItems instanceof BuilderContract) {
+            if ($request->filled('per_page') || $request->filled('page')) {
+                $perPage = max(1, min($this->maxPerPage, (int) $request->input('per_page', 25)));
+                $page = max(1, (int) $request->input('page', 1));
+                $paginator = $queryOrItems->paginate($perPage, ['*'], 'page', $page);
+
+                return $this->listResponse($paginator->items(), $paginator->total(), $page, $perPage, $message);
             }
-            $items = $queryOrItems->get();
+
+            $queryOrItems = $queryOrItems->get();
         }
 
-        return $this->listResponse($items, count($items), 1, count($items), $message);
+        $items = collect($queryOrItems)->values();
+
+        return $this->listResponse($items, $items->count(), 1, max(1, $items->count()), $message);
     }
 
     private function listResponse($items, int $total, int $page, int $perPage, string $message): JsonResponse
@@ -36,25 +41,14 @@ trait ApiResponse
         return response()->json([
             'success' => true,
             'message' => $message,
-            'data'    => $items,
-            'errors'  => null,
+            'data' => $items,
+            'errors' => null,
         ])->withHeaders([
             'X-Total-Count' => $total,
             'X-Current-Page' => $page,
             'X-Per-Page' => $perPage,
-        ]);
-    }
-
-    /**
-     * ✅ Untuk /users saja (FE user.service expect {items, meta})
-     */
-    protected function paginatedItems(array $items, array $meta, string $message = 'OK'): JsonResponse
-    {
-        return response()->json([
-            'success' => true,
-            'message' => $message,
-            'data'    => ['items' => $items, 'meta' => $meta],
-            'errors'  => null,
+            'X-Last-Page' => (int) max(1, ceil($total / max(1, $perPage))),
+            'Access-Control-Expose-Headers' => 'X-Total-Count, X-Current-Page, X-Per-Page, X-Last-Page',
         ]);
     }
 
@@ -63,8 +57,8 @@ trait ApiResponse
         return response()->json([
             'success' => true,
             'message' => $message,
-            'data'    => $data,
-            'errors'  => null,
+            'data' => $data,
+            'errors' => null,
         ], $code);
     }
 
@@ -73,23 +67,20 @@ trait ApiResponse
         return response()->json([
             'success' => false,
             'message' => $message,
-            'data'    => null,
-            'errors'  => $errors,
+            'data' => null,
+            'errors' => $errors,
         ], $code);
     }
 
-    protected function presentUser($user): array
+    /**
+     * Terapkan sort yang di-whitelist dari query ?orderBy=&order=.
+     */
+    protected function applySort($query, Request $request, array $allowed, string $default, string $direction = 'desc'): void
     {
-        return [
-            'user_id'    => $user->user_id,
-            'username'   => $user->name,
-            'full_name'  => $user->name,
-            'name'       => $user->name,
-            'email'      => $user->email,
-            'role'       => $user->role,
-            'role_id'    => $user->role_id,
-            'status'     => $user->status ?? 'aktif',
-            'created_at' => $user->created_at,
-        ];
+        $column = $request->input('orderBy', $request->input('sort_by'));
+        $column = in_array($column, $allowed, true) ? $column : $default;
+        $dir = strtolower((string) $request->input('order', $request->input('sort_dir', $direction)));
+
+        $query->orderBy($column, $dir === 'asc' ? 'asc' : 'desc');
     }
 }
