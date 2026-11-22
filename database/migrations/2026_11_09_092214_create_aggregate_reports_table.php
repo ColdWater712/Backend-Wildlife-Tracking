@@ -10,14 +10,15 @@ return new class extends Migration
     {
         Schema::create('aggregate_reports', function (Blueprint $table) {
             $table->id('report_id');
-            $table->unsignedBigInteger('generated_by')->nullable();
+            $table->foreignId('generated_by')->nullable()
+                ->constrained('users', 'user_id')->nullOnDelete()->cascadeOnUpdate();
             $table->enum('report_type', ['daily', 'weekly', 'monthly']);
             $table->date('period_start');
             $table->date('period_end');
+            $table->json('report_data')->nullable()->comment('ringkasan statistik hasil agregasi');
             $table->timestamp('generated_at')->useCurrent();
             $table->string('file_path', 500)->nullable();
-            
-            $table->foreign('generated_by')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
+            $table->unique(['report_type', 'period_start', 'period_end']);
         });
     }
 

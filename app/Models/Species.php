@@ -9,17 +9,12 @@ class Species extends Model
 {
     use SoftDeletes;
 
+    public static $snakeAttributes = false;
+
     protected $table = 'species';
     protected $primaryKey = 'species_id';
-    public $incrementing = true;
-    public $timestamps = false;
 
     protected $fillable = ['common_name', 'scientific_name', 'conservation_status'];
-
-    protected function casts(): array
-    {
-        return ['deleted_at' => 'datetime'];
-    }
 
     public function animals()
     {

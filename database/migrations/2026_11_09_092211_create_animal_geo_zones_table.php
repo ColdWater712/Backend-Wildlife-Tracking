@@ -10,15 +10,15 @@ return new class extends Migration
     {
         Schema::create('animal_geo_zones', function (Blueprint $table) {
             $table->id('visit_id');
-            $table->unsignedBigInteger('animal_id');
-            $table->unsignedBigInteger('zone_id');
-            $table->unsignedBigInteger('entry_reading_id')->nullable();
+            $table->foreignId('animal_id')
+                ->constrained('animals', 'animal_id')->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreignId('zone_id')
+                ->constrained('geo_zones', 'zone_id')->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreignId('entry_reading_id')->nullable()
+                ->constrained('gps_readings', 'reading_id')->nullOnDelete()->cascadeOnUpdate();
             $table->timestamp('entered_at');
             $table->timestamp('exited_at')->nullable();
-            
-            $table->foreign('animal_id')->references('animal_id')->on('animals')->cascadeOnDelete()->cascadeOnUpdate();
-            $table->foreign('zone_id')->references('zone_id')->on('geo_zones')->cascadeOnDelete()->cascadeOnUpdate();
-            $table->foreign('entry_reading_id')->references('reading_id')->on('gps_readings')->nullOnDelete()->cascadeOnUpdate();
+            $table->index(['animal_id', 'zone_id', 'exited_at']);
         });
     }
 

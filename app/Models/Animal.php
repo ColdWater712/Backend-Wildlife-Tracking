@@ -9,20 +9,29 @@ class Animal extends Model
 {
     use SoftDeletes;
 
+    public static $snakeAttributes = false;
+
     protected $table = 'animals';
     protected $primaryKey = 'animal_id';
-    public $incrementing = true;
-    public $timestamps = false;
 
-    protected $fillable = ['species_id', 'name', 'birth_date', 'gender', 'is_active'];
+    protected $fillable = [
+        'species_id', 'name_animal', 'birth_date', 'gender', 'distinctive_marks', 'is_active',
+    ];
+
+    /** `name` dipertahankan sebagai alias baca dari `name_animal` untuk frontend. */
+    protected $appends = ['name'];
 
     protected function casts(): array
     {
         return [
-            'birth_date' => 'date',
+            'birth_date' => 'date:Y-m-d',
             'is_active' => 'boolean',
-            'deleted_at' => 'datetime',
         ];
+    }
+
+    public function getNameAttribute(): ?string
+    {
+        return $this->name_animal;
     }
 
     public function species()
@@ -38,16 +47,12 @@ class Animal extends Model
     public function gpsReadings()
     {
         return $this->hasManyThrough(
-            GpsReading::class,
-            TrackingDevice::class,
-            'animal_id',
-            'device_id',
-            'animal_id',
-            'device_id',
+            GpsReading::class, TrackingDevice::class,
+            'animal_id', 'device_id', 'animal_id', 'device_id',
         );
     }
 
-    public function geoZoneVisits()
+    public function zoneVisits()
     {
         return $this->hasMany(AnimalGeoZone::class, 'animal_id', 'animal_id');
     }
@@ -60,5 +65,10 @@ class Animal extends Model
     public function notifications()
     {
         return $this->hasMany(Notification::class, 'animal_id', 'animal_id');
+    }
+
+    public function aiObservations()
+    {
+        return $this->hasMany(AiPrediction::class, 'predicted_animal_id', 'animal_id');
     }
 }

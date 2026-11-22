@@ -10,14 +10,22 @@ return new class extends Migration
     {
         Schema::create('ai_media_uploads', function (Blueprint $table) {
             $table->id('media_id');
-            $table->unsignedBigInteger('uploaded_by')->nullable();
-            $table->unsignedBigInteger('report_id')->nullable()->comment('opsional: laporan kejadian terkait');
-            $table->enum('media_type', ['image', 'video']);
+            $table->foreignId('uploaded_by')->nullable()
+                ->constrained('users', 'user_id')->nullOnDelete()->cascadeOnUpdate();
+            $table->foreignId('report_id')->nullable()->comment('opsional: laporan kejadian terkait')
+                ->constrained('incident_reports', 'report_id')->nullOnDelete()->cascadeOnUpdate();
+            $table->foreignId('device_id')->nullable()->comment('kamera / perekam audio sumber media')
+                ->constrained('tracking_devices', 'device_id')->nullOnDelete()->cascadeOnUpdate();
+            $table->foreignId('zone_id')->nullable()
+                ->constrained('geo_zones', 'zone_id')->nullOnDelete()->cascadeOnUpdate();
+            $table->enum('media_type', ['image', 'video', 'audio']);
             $table->string('file_path', 500);
+            $table->string('mime_type', 100)->nullable();
+            $table->unsignedBigInteger('file_size')->nullable()->comment('byte');
+            $table->decimal('latitude', 9, 6)->nullable();
+            $table->decimal('longitude', 10, 6)->nullable();
+            $table->timestamp('captured_at')->nullable();
             $table->timestamp('uploaded_at')->useCurrent();
-            
-            $table->foreign('uploaded_by')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
-            $table->foreign('report_id')->references('report_id')->on('incident_reports')->nullOnDelete()->cascadeOnUpdate();
         });
     }
 

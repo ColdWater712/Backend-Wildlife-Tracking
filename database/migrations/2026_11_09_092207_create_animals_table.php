@@ -10,13 +10,15 @@ return new class extends Migration
     {
         Schema::create('animals', function (Blueprint $table) {
             $table->id('animal_id');
-            $table->unsignedBigInteger('species_id');
-            $table->string('name', 100);
+            $table->foreignId('species_id')
+                ->constrained('species', 'species_id')->restrictOnDelete()->cascadeOnUpdate();
+            $table->string('name_animal', 100)->unique()->comment('kode/nama individu, mis. ORN-01');
             $table->date('birth_date')->nullable();
             $table->enum('gender', ['male', 'female', 'unknown'])->default('unknown');
+            $table->text('distinctive_marks')->nullable()->comment('ciri fisik pembeda untuk identifikasi AI');
             $table->boolean('is_active')->default(true);
-            
-            $table->foreign('species_id')->references('species_id')->on('species')->restrictOnDelete()->cascadeOnUpdate();
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 

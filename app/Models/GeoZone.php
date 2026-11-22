@@ -9,10 +9,10 @@ class GeoZone extends Model
 {
     use SoftDeletes;
 
+    public static $snakeAttributes = false;
+
     protected $table = 'geo_zones';
     protected $primaryKey = 'zone_id';
-    public $incrementing = true;
-    public $timestamps = false;
 
     protected $fillable = [
         'zone_name', 'zone_type', 'center_lat', 'center_lon',
@@ -22,12 +22,10 @@ class GeoZone extends Model
     protected function casts(): array
     {
         return [
-            'center_lat' => 'decimal:6',
-            'center_lon' => 'decimal:6',
-            'radius_km' => 'decimal:3',
+            'center_lat' => 'float',
+            'center_lon' => 'float',
+            'radius_km' => 'float',
             'polygon_geojson' => 'array',
-            'created_at' => 'datetime',
-            'deleted_at' => 'datetime',
         ];
     }
 
@@ -36,9 +34,14 @@ class GeoZone extends Model
         return $this->belongsTo(User::class, 'created_by', 'user_id');
     }
 
-    public function animalVisits()
+    public function visits()
     {
         return $this->hasMany(AnimalGeoZone::class, 'zone_id', 'zone_id');
+    }
+
+    public function devices()
+    {
+        return $this->hasMany(TrackingDevice::class, 'zone_id', 'zone_id');
     }
 
     public function notifications()

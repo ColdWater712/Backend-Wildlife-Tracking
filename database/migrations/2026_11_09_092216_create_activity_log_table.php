@@ -10,12 +10,12 @@ return new class extends Migration
     {
         Schema::create('activity_log', function (Blueprint $table) {
             $table->id('log_id');
-            $table->unsignedBigInteger('user_id')->nullable();
+            $table->foreignId('user_id')->nullable()
+                ->constrained('users', 'user_id')->nullOnDelete()->cascadeOnUpdate();
             $table->string('action', 100);
             $table->timestamp('timestamp')->useCurrent();
             $table->text('details')->nullable();
-            
-            $table->foreign('user_id')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
+            $table->index(['user_id', 'timestamp']);
         });
     }
 

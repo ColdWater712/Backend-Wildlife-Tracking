@@ -16,10 +16,11 @@ return new class extends Migration
             $table->decimal('center_lon', 10, 6)->nullable();
             $table->decimal('radius_km', 8, 3)->nullable();
             $table->json('polygon_geojson')->nullable()->comment('GeoJSON Polygon WGS84');
-            $table->unsignedBigInteger('created_by')->nullable();
+            $table->foreignId('created_by')->nullable()
+                ->constrained('users', 'user_id')->nullOnDelete()->cascadeOnUpdate();
             $table->timestamp('created_at')->useCurrent();
-            
-            $table->foreign('created_by')->references('user_id')->on('users')->nullOnDelete()->cascadeOnUpdate();
+            $table->timestamp('updated_at')->nullable();
+            $table->softDeletes();
         });
     }
 

@@ -6,9 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class GpsReading extends Model
 {
+    public static $snakeAttributes = false;
+
     protected $table = 'gps_readings';
     protected $primaryKey = 'reading_id';
-    public $incrementing = true;
     public $timestamps = false;
 
     protected $fillable = [
@@ -19,10 +20,10 @@ class GpsReading extends Model
     protected function casts(): array
     {
         return [
-            'latitude' => 'decimal:6',
-            'longitude' => 'decimal:6',
-            'altitude_meters' => 'decimal:2',
-            'accuracy_meters' => 'decimal:2',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'altitude_meters' => 'float',
+            'accuracy_meters' => 'float',
             'recorded_at' => 'datetime',
         ];
     }
@@ -30,18 +31,6 @@ class GpsReading extends Model
     public function device()
     {
         return $this->belongsTo(TrackingDevice::class, 'device_id', 'device_id');
-    }
-
-    public function animal()
-    {
-        return $this->hasOneThrough(
-            Animal::class,
-            TrackingDevice::class,
-            'device_id',
-            'animal_id',
-            'device_id',
-            'animal_id',
-        );
     }
 
     public function weatherData()

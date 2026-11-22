@@ -3,70 +3,86 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+
+    public static $snakeAttributes = false;
 
     protected $table = 'users';
     protected $primaryKey = 'user_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
-    public $timestamps = true;
 
-    // ✅ FIELD YANG SESUAI DENGAN SKEMA DATABASE TERBARU
     protected $fillable = [
-        'username',
-        'full_name',
-        'email',
-        'password',
-        'role_id',
-        'address',
-        'phone',
-        'status',
+        'role_id', 'username', 'full_name', 'email', 'password',
+        'address', 'phone', 'status',
     ];
 
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = ['password', 'remember_token'];
 
-    protected $casts = [
-        'email_verified_at' => 'datetime',
-        'password' => 'hashed',
-    ];
+    /** Bentuk agregat: user_id, role_id, username, name_role. */
+    protected $appends = ['name_role'];
 
-    /**
-     * Relasi ke tabel roles
-     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
+
+    public function getNameRoleAttribute(): ?string
+    {
+        return $this->role?->name_role;
+    }
+
     public function role()
     {
         return $this->belongsTo(Role::class, 'role_id', 'role_id');
     }
 
-    /**
-     * Relasi ke permissions (melalui role)
-     */
-    public function permissions()
+    /** Daftar nama permission milik role user (di-cache per instance). */
+    public function permissionNames(): array
     {
-        return $this->hasManyThrough(
-            Permission::class,
-            RolePermission::class,
-            'role_id',       // Foreign key di tabel role_permissions
-            'permission_id', // Foreign key di tabel permissions
-            'role_id',       // Local key di tabel users
-            'permission_id'  // Local key di tabel role_permissions
-        );
+        return once(fn () => $this->role
+            ? $this->role->permissions()->pluck('name_permission')->all()
+            : []);
     }
 
-    /**
-     * Relasi ke activity logs
-     */
+    public function hasPermission(string ...$permissions): bool
+    {
+        $owned = $this->permissionNames();
+
+        foreach ($permissions as $permission) {
+            if (in_array($permission, $owned, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role?->name_role, $roles, true);
+    }
+
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class, 'user_id', 'user_id');
+    }
+
+    public function incidentReports()
+    {
+        return $this->hasMany(IncidentReport::class, 'user_id', 'user_id');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class, 'user_id', 'user_id');
     }
 }

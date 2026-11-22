@@ -10,21 +10,19 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id('user_id');
-            $table->string('username')->unique();
-            $table->string('full_name');
-            $table->string('email')->unique();
+            $table->foreignId('role_id')->nullable()
+                ->constrained('roles', 'role_id')->nullOnDelete()->cascadeOnUpdate();
+            $table->string('username', 50)->unique();
+            $table->string('full_name', 100);
+            $table->string('email', 150)->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            
-            // ✅ DEFINISI FOREIGN KEY EKSPLISIT (Paling Aman, Tanpa Tebakan Laravel)
-            $table->unsignedBigInteger('role_id')->nullable();
-            $table->foreign('role_id')->references('role_id')->on('roles')->onDelete('set null');
-            
-            $table->string('address')->nullable();
-            $table->string('phone')->nullable();
+            $table->string('password')->comment('hash bcrypt/argon2');
+            $table->string('address', 255)->nullable();
+            $table->string('phone', 30)->nullable();
             $table->enum('status', ['aktif', 'nonaktif'])->default('aktif');
             $table->rememberToken();
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

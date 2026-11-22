@@ -10,7 +10,8 @@ return new class extends Migration
     {
         Schema::create('weather_data', function (Blueprint $table) {
             $table->id('weather_id');
-            $table->unsignedBigInteger('reading_id')->nullable();
+            $table->foreignId('reading_id')->nullable()
+                ->constrained('gps_readings', 'reading_id')->nullOnDelete()->cascadeOnUpdate();
             $table->decimal('latitude', 9, 6);
             $table->decimal('longitude', 10, 6);
             $table->timestamp('observed_at');
@@ -18,9 +19,7 @@ return new class extends Migration
             $table->decimal('rainfall_mm', 7, 2)->nullable();
             $table->decimal('humidity_percent', 5, 2)->nullable();
             $table->decimal('pressure_hpa', 7, 2)->nullable();
-            $table->string('source', 50)->default('WeatherAPI.com');
-            
-            $table->foreign('reading_id')->references('reading_id')->on('gps_readings')->nullOnDelete()->cascadeOnUpdate();
+            $table->string('source', 50)->default('Open-Meteo');
         });
     }
 

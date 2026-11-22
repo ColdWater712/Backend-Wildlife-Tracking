@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('roles', function (Blueprint $table) {
             $table->id('role_id');
-            $table->string('role_name', 50)->unique();
+            $table->string('name_role', 50)->unique();
             $table->string('description', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
         });

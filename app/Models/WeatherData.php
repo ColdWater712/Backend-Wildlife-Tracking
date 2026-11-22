@@ -6,26 +6,26 @@ use Illuminate\Database\Eloquent\Model;
 
 class WeatherData extends Model
 {
+    public static $snakeAttributes = false;
+
     protected $table = 'weather_data';
     protected $primaryKey = 'weather_id';
-    public $incrementing = true;
     public $timestamps = false;
 
     protected $fillable = [
-        'reading_id', 'latitude', 'longitude', 'observed_at',
-        'temperature_c', 'rainfall_mm', 'humidity_percent',
-        'pressure_hpa', 'source',
+        'reading_id', 'latitude', 'longitude', 'observed_at', 'temperature_c',
+        'rainfall_mm', 'humidity_percent', 'pressure_hpa', 'source',
     ];
 
     protected function casts(): array
     {
         return [
-            'latitude' => 'decimal:6',
-            'longitude' => 'decimal:6',
-            'temperature_c' => 'decimal:2',
-            'rainfall_mm' => 'decimal:2',
-            'humidity_percent' => 'decimal:2',
-            'pressure_hpa' => 'decimal:2',
+            'latitude' => 'float',
+            'longitude' => 'float',
+            'temperature_c' => 'float',
+            'rainfall_mm' => 'float',
+            'humidity_percent' => 'float',
+            'pressure_hpa' => 'float',
             'observed_at' => 'datetime',
         ];
     }

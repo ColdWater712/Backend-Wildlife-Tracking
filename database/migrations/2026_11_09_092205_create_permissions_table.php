@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('permissions', function (Blueprint $table) {
             $table->id('permission_id');
-            $table->string('permission_name', 100)->unique();
+            $table->string('name_permission', 100)->unique();
             $table->string('description', 255)->nullable();
             $table->timestamp('created_at')->useCurrent();
         });
