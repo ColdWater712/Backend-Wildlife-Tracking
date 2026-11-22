@@ -10,29 +10,23 @@ class AnimalSeeder extends Seeder
 {
     public function run(): void
     {
-        $data = [
-            ['code' => 'ORN-01', 'species' => 'Pongo abelii', 'birth_date' => '2023-08-04', 'gender' => 'male'],
-            ['code' => 'ORN-02', 'species' => 'Pongo abelii', 'birth_date' => '2020-05-12', 'gender' => 'female'],
-            ['code' => 'HRM-01', 'species' => 'Panthera tigris sumatrae', 'birth_date' => '2019-12-28', 'gender' => 'unknown'],
-            ['code' => 'BDK-01', 'species' => 'Dicerorhinus sumatrensis', 'birth_date' => '2019-11-21', 'gender' => 'female'],
-            ['code' => 'GJS-01', 'species' => 'Elephas maximus sumatranus', 'birth_date' => '2022-03-18', 'gender' => 'female'],
-            ['code' => 'RSA-01', 'species' => 'Rusa unicolor', 'birth_date' => '2014-02-14', 'gender' => 'female'],
-        ];
+        $species = Species::pluck('species_id', 'scientific_name');
 
-        foreach ($data as $row) {
-            $species = Species::where('scientific_name', $row['species'])->first();
-            if (!$species) continue;
-
-            Animal::updateOrCreate(
-                ['name' => $row['code']],
-                [
-                    'species_id' => $species->species_id,
-                    'name' => $row['code'],
-                    'birth_date' => $row['birth_date'],
-                    'gender' => $row['gender'],
-                    'is_active' => true,
-                ]
-            );
+        foreach ([
+            ['ORN-01', 'Pongo abelii', '2023-08-04', 'male', 'Jantan muda, bantalan pipi belum berkembang, bekas luka kecil di bahu kiri'],
+            ['ORN-02', 'Pongo abelii', '2020-05-12', 'female', 'Betina dewasa, sering terlihat bersama anak, rambut kemerahan terang'],
+            ['HRM-01', 'Panthera tigris sumatrae', '2019-12-28', 'unknown', 'Belang rapat, telinga kanan sobek di ujung'],
+            ['BDK-01', 'Dicerorhinus sumatrensis', '2019-11-21', 'female', 'Cula depan pendek, bekas luka di sisi kanan tubuh'],
+            ['GJS-01', 'Elephas maximus sumatranus', '2022-03-18', 'female', 'Gajah muda, telinga kiri berlubang kecil'],
+            ['RSA-01', 'Rusa unicolor', '2014-02-14', 'female', null],
+        ] as [$code, $scientific, $birth, $gender, $marks]) {
+            Animal::updateOrCreate(['name_animal' => $code], [
+                'species_id' => $species[$scientific],
+                'birth_date' => $birth,
+                'gender' => $gender,
+                'distinctive_marks' => $marks,
+                'is_active' => true,
+            ]);
         }
     }
 }

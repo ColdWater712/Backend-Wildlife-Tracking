@@ -9,19 +9,14 @@ class SpeciesSeeder extends Seeder
 {
     public function run(): void
     {
-        $species = [
-            ['common_name' => 'Orangutan Sumatra', 'scientific_name' => 'Pongo abelii', 'conservation_status' => 'Critically Endangered'],
-            ['common_name' => 'Harimau Sumatra', 'scientific_name' => 'Panthera tigris sumatrae', 'conservation_status' => 'Critically Endangered'],
-            ['common_name' => 'Badak Sumatra', 'scientific_name' => 'Dicerorhinus sumatrensis', 'conservation_status' => 'Critically Endangered'],
-            ['common_name' => 'Gajah Sumatra', 'scientific_name' => 'Elephas maximus sumatranus', 'conservation_status' => 'Critically Endangered'],
-            ['common_name' => 'Rusa Sambar', 'scientific_name' => 'Rusa unicolor', 'conservation_status' => 'Vulnerable'],
-        ];
-
-        foreach ($species as $sp) {
-            Species::updateOrCreate(
-                ['scientific_name' => $sp['scientific_name']],
-                $sp
-            );
+        foreach ([
+            ['Orangutan Sumatra', 'Pongo abelii', 'Critically Endangered'],
+            ['Harimau Sumatra', 'Panthera tigris sumatrae', 'Critically Endangered'],
+            ['Badak Sumatra', 'Dicerorhinus sumatrensis', 'Critically Endangered'],
+            ['Gajah Sumatra', 'Elephas maximus sumatranus', 'Critically Endangered'],
+            ['Rusa Sambar', 'Rusa unicolor', 'Vulnerable'],
+        ] as [$common, $scientific, $status]) {
+            Species::updateOrCreate(['scientific_name' => $scientific], ['common_name' => $common, 'conservation_status' => $status]);
         }
     }
 }

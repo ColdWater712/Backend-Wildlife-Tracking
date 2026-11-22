@@ -10,36 +10,19 @@ class GeoZoneSeeder extends Seeder
 {
     public function run(): void
     {
-        $user = User::where('username', 'admin')->first() ?? User::first();
-        $userId = $user ? $user->user_id : null;
+        $admin = User::where('username', 'admin')->value('user_id');
 
-        $geoZones = [
-            [
-                'zone_name'       => 'Zona Inti TNGL', 
-                'zone_type'       => 'koridor_ekologis',
-                'polygon_geojson' => json_encode([
-                    ['lat' => 3.5, 'lng' => 97.5],
-                    ['lat' => 3.5, 'lng' => 98.5],
-                    ['lat' => 4.5, 'lng' => 98.5],
-                    ['lat' => 4.5, 'lng' => 97.5]
-                ]),
-                'created_by'      => $userId,
-            ],
-            [
-                'zone_name'       => 'Zona Penyangga TNGL',
-                'zone_type'       => 'perkebunan',
-                'polygon_geojson' => json_encode([
-                    ['lat' => 3.0, 'lng' => 97.0],
-                    ['lat' => 3.0, 'lng' => 99.0],
-                    ['lat' => 5.0, 'lng' => 99.0],
-                    ['lat' => 5.0, 'lng' => 97.0]
-                ]),
-                'created_by'      => $userId,
-            ],
-        ];
-
-        foreach ($geoZones as $zone) {
-            GeoZone::create($zone);
+        foreach ([
+            ['Zona Konservasi Utara', 'koridor_ekologis', 3.671430, 98.150000, 4.000],
+            ['Zona Perkebunan Tengah', 'perkebunan', 3.640000, 98.040000, 2.500],
+            ['Zona Permukiman Selatan', 'permukiman', 3.560000, 97.960000, 2.000],
+            ['Zona Jalan Raya Timur', 'jalan_raya', 3.918911, 97.535144, 1.514],
+            ['Zona Hutan Lindung Barat', 'koridor_ekologis', 3.520000, 97.910000, 3.000],
+        ] as [$name, $type, $lat, $lon, $radius]) {
+            GeoZone::updateOrCreate(['zone_name' => $name], [
+                'zone_type' => $type, 'center_lat' => $lat, 'center_lon' => $lon,
+                'radius_km' => $radius, 'created_by' => $admin,
+            ]);
         }
     }
 }
