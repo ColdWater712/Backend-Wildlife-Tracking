@@ -2,107 +2,91 @@
 
 namespace Tests\Feature;
 
-use App\Models\Role;
-use App\Models\User;
-use App\Models\Species;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class RbacTest extends TestCase
 {
-    use RefreshDatabase;
-
-    protected $adminUser;
-    protected $adminToken;
-    protected $fieldUser;
-    protected $fieldToken;
-
     protected function setUp(): void
     {
         parent::setUp();
-        
-        $adminRole = Role::create(['role_name' => 'administrator_sistem']);
-        $this->adminUser = User::create([
-            'username' => 'admin',
-            'full_name' => 'Admin Sistem',
-            'email' => 'admin@test.id',
-            'password' => Hash::make('password123'),
-            'role_id' => $adminRole->role_id,
-            'status' => 'aktif',
-        ]);
-        $this->adminToken = $this->adminUser->createToken('admin-token')->plainTextToken;
-
-        $fieldRole = Role::create(['role_name' => 'konservasionis_lapangan']);
-        $this->fieldUser = User::create([
-            'username' => 'lapangan',
-            'full_name' => 'Konservasionis Lapangan',
-            'email' => 'lapangan@test.id',
-            'password' => Hash::make('password123'),
-            'role_id' => $fieldRole->role_id,
-            'status' => 'aktif',
-        ]);
-        $this->fieldToken = $this->fieldUser->createToken('field-token')->plainTextToken;
+        $this->seedAll();
     }
 
-    public function test_non_admin_cannot_create_animal()
+    public function test_field_officer_cannot_manage_master_data_or_users(): void
     {
-        $species = Species::create(['common_name' => 'Gajah', 'scientific_name' => 'Elephas maximus', 'conservation_status' => 'CR']);
+        $headers = $this->loginAs('lapangan');
 
-        $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $this->fieldToken,
-            'Accept' => 'application/json',
-        ])->postJson('/api/animals', [
-            'name' => 'Gajah Test',
-            'species_id' => $species->species_id,
-            'gender' => 'male',
-        ]);
-
-        $response->assertStatus(403)
-                 ->assertJson([
-                     'success' => false,
-                 ]);
-        
-        // ✅ PERBAIKAN: Gunakan assertStringContainsString agar tidak gagal karena perbedaan teks pesan yang spesifik
-        $this->assertStringContainsString('Anda tidak memiliki akses', $response->json('message'));
+        $this->postJson('/api/species', ['common_name' => 'X', 'scientific_name' => 'X y', 'conservation_status' => 'Vulnerable'], $headers)->assertForbidden();
+        $this->getJson('/api/users', $headers)->assertForbidden();
+        $this->getJson('/api/roles', $headers)->assertForbidden();
+        $this->getJson('/api/export/animals/csv', $headers)->assertForbidden();
     }
 
-    public function test_admin_can_create_animal()
+    public function test_field_officer_can_report_incident(): void
     {
-        $species = Species::create(['common_name' => 'Badak', 'scientific_name' => 'Dicerorhinus sumatrensis', 'conservation_status' => 'CR']);
-
-        $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $this->adminToken,
-            'Accept' => 'application/json',
-        ])->postJson('/api/animals', [
-            'name' => 'Badak Test',
-            'species_id' => $species->species_id,
-            'gender' => 'female',
-        ]);
-
-        $response->assertStatus(201)
-                 ->assertJson([
-                     'success' => true,
-                 ]);
+        $this->postJson('/api/incidents', [
+            'incident_type' => 'konflik',
+            'description' => 'Gajah masuk kebun',
+            'timestamp' => now()->subHour()->toDateTimeString(),
+            'latitude' => 3.64,
+            'longitude' => 98.04,
+            'location' => 'Kebun warga',
+            'status' => 'pending',
+        ], $this->loginAs('lapangan'))
+            ->assertCreated()
+            ->assertJsonPath('data.zone.zone_name', 'Zona Perkebunan Tengah');
     }
 
-    // ✅ PERBAIKAN: Ganti nama dan endpoint test. 
-    // GET /api/users TIDAK dilindungi middleware role di routes/api.php (hanya write operations).
-    // Jadi kita test POST /api/users yang PASTI dilindungi middleware administrator_sistem.
-    public function test_non_admin_cannot_create_user()
+    public function test_policy_maker_is_read_only(): void
     {
-        $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $this->fieldToken,
-            'Accept' => 'application/json',
-        ])->postJson('/api/users', [
-            'username' => 'newuser',
-            'full_name' => 'New User',
-            'email' => 'newuser@test.id',
-            'password' => 'password123',
-            'role_id' => 1,
-        ]);
+        $headers = $this->loginAs('kebijakan');
 
-        $response->assertStatus(403);
-        $this->assertStringContainsString('Anda tidak memiliki akses', $response->json('message'));
+        $this->getJson('/api/animals', $headers)->assertOk();
+        $this->getJson('/api/aggregate-reports', $headers)->assertOk();
+        $this->getJson('/api/export/incidents/csv', $headers)->assertOk();
+        $this->postJson('/api/incidents', [], $headers)->assertForbidden();
+        $this->postJson('/api/ai-predictions/' . \App\Models\AiPrediction::value('prediction_id') . '/verify', [], $headers)->assertForbidden();
+    }
+
+    public function test_researcher_manages_master_data(): void
+    {
+        $this->postJson('/api/species', [
+            'common_name' => 'Beruang Madu', 'scientific_name' => 'Helarctos malayanus', 'conservation_status' => 'Vulnerable',
+        ], $this->loginAs('peneliti'))->assertCreated();
+    }
+
+    public function test_role_permission_assignment(): void
+    {
+        $headers = $this->loginAs('admin');
+
+        $view = $this->idOf('Permission', 'name_permission', 'view_data');
+        $create = $this->idOf('Permission', 'name_permission', 'create_data');
+        $adminRole = $this->idOf('Role', 'name_role', 'administrator_sistem');
+
+        $role = $this->postJson('/api/roles', ['name_role' => 'relawan', 'description' => 'Relawan', 'permission_ids' => [$view]], $headers)
+            ->assertCreated()->json('data');
+        $this->assertSame('relawan', $role['role_name']);
+
+        $this->putJson("/api/roles/{$role['role_id']}/permissions", ['permission_ids' => [$view, $create]], $headers)
+            ->assertOk()->assertJsonCount(2, 'data.permissions');
+        $this->deleteJson("/api/roles/{$role['role_id']}/permissions/{$create}", [], $headers)->assertOk()->assertJsonCount(1, 'data.permissions');
+        $this->deleteJson("/api/roles/{$adminRole}", [], $headers)->assertStatus(409);
+    }
+
+    public function test_user_crud_uses_role_id_relation(): void
+    {
+        $headers = $this->loginAs('admin');
+
+        $user = $this->postJson('/api/users', [
+            'username' => 'ranger01', 'full_name' => 'Ranger Satu', 'email' => 'ranger@wildlife.id',
+            'password' => 'password123', 'role' => 'konservasionis_lapangan', 'address' => 'Kutacane',
+        ], $headers)->assertCreated()
+            ->assertJsonPath('data.name_role', 'konservasionis_lapangan')
+            ->assertJsonPath('data.address', 'Kutacane')
+            ->json('data');
+
+        $this->patchJson("/api/users/{$user['user_id']}/status", ['status' => 'nonaktif'], $headers)->assertOk();
+        $this->deleteJson("/api/users/{$user['user_id']}", [], $headers)->assertOk();
+        $this->deleteJson('/api/users/' . $this->idOf('User', 'username', 'admin'), [], $headers)->assertStatus(422);
     }
 }

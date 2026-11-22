@@ -2,97 +2,72 @@
 
 namespace Tests\Feature;
 
-use App\Models\Role;
-use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
 {
-    use RefreshDatabase;
-
-    public function test_login_success_returns_token_and_username()
+    protected function setUp(): void
     {
-        $role = Role::create(['role_name' => 'administrator_sistem']);
-        
-        $user = User::create([
-            'username' => 'admin',
-            'full_name' => 'Admin Sistem',
-            'email' => 'admin@test.id',
-            'password' => Hash::make('password123'),
-            'role_id' => $role->role_id,
-            'status' => 'aktif',
-        ]);
-
-        $response = $this->postJson('/api/login', [
-            'email' => 'admin@test.id',
-            'password' => 'password123',
-        ]);
-
-        $response->assertStatus(200)
-                 ->assertJsonStructure([
-                     'success',
-                     'message',
-                     'data' => [
-                         'user' => ['username', 'full_name', 'email', 'role'],
-                         'token',
-                     ]
-                 ])
-                 ->assertJson([
-                     'data' => [
-                         'user' => [
-                             'username' => 'admin',
-                             'full_name' => 'Admin Sistem',
-                         ]
-                     ]
-                 ]);
+        parent::setUp();
+        $this->seedAll();
     }
 
-    public function test_login_fails_wrong_password()
+    public function test_login_returns_shape_expected_by_frontend(): void
     {
-        $role = Role::create(['role_name' => 'administrator_sistem']);
-        User::create([
-            'username' => 'admin',
-            'full_name' => 'Admin Sistem',
-            'email' => 'admin@test.id',
-            'password' => Hash::make('password123'),
-            'role_id' => $role->role_id,
-            'status' => 'aktif',
-        ]);
-
-        $response = $this->postJson('/api/login', [
-            'email' => 'admin@test.id',
-            'password' => 'wrongpassword',
-        ]);
-
-        $response->assertStatus(422)
-                 ->assertJsonValidationErrors(['email']);
+        $this->postJson('/api/login', ['email' => 'admin@wildlife.id', 'password' => 'password123'])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.user.username', 'admin')
+            ->assertJsonPath('data.user.full_name', 'Admin Sistem')
+            ->assertJsonPath('data.user.role_id', $this->idOf('Role', 'name_role', 'administrator_sistem'))
+            ->assertJsonPath('data.user.name_role', 'administrator_sistem')
+            ->assertJsonPath('data.user.role.role_name', 'administrator_sistem')
+            ->assertJsonMissingPath('data.user.password')
+            ->assertJsonStructure(['data' => ['token', 'user' => ['user_id', 'email', 'status', 'permissions']]]);
     }
 
-    public function test_logout_revokes_token()
+    public function test_login_fails_with_wrong_password(): void
     {
-        $role = Role::create(['role_name' => 'administrator_sistem']);
-        $user = User::create([
-            'username' => 'admin',
-            'full_name' => 'Admin Sistem',
-            'email' => 'admin@test.id',
-            'password' => Hash::make('password123'),
-            'role_id' => $role->role_id,
-            'status' => 'aktif',
-        ]);
+        $this->postJson('/api/login', ['email' => 'admin@wildlife.id', 'password' => 'salah'])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonStructure(['errors' => ['email']]);
+    }
 
-        $token = $user->createToken('test-token')->plainTextToken;
+    public function test_inactive_user_cannot_login(): void
+    {
+        \App\Models\User::where('username', 'lapangan')->update(['status' => 'nonaktif']);
 
-        $response = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token,
-            'Accept' => 'application/json',
-        ])->postJson('/api/logout');
+        $this->postJson('/api/login', ['email' => 'lapangan@wildlife.id', 'password' => 'password123'])->assertForbidden();
+    }
 
-        $response->assertStatus(200)
-                 ->assertJson([
-                     'success' => true,
-                     'message' => 'Logout berhasil',
-                 ]);
+    public function test_me_and_logout(): void
+    {
+        $headers = $this->loginAs('peneliti');
+
+        $this->getJson('/api/me', $headers)->assertOk()->assertJsonPath('data.role.role_name', 'peneliti_ekologi');
+        $this->getJson('/api/v1/auth/me', $headers)->assertOk();
+        $this->postJson('/api/logout', [], $headers)->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->getJson('/api/me', $headers)->assertUnauthorized();
+    }
+
+    public function test_public_registration_is_not_available(): void
+    {
+        $this->postJson('/api/register', [])->assertNotFound();
+    }
+
+    public function test_change_password(): void
+    {
+        $headers = $this->loginAs('lapangan');
+
+        $this->putJson('/api/me/password', [
+            'old_password' => 'password123',
+            'new_password' => 'rahasiaBaru1',
+            'new_password_confirmation' => 'rahasiaBaru1',
+        ], $headers)->assertOk();
+
+        $this->postJson('/api/login', ['email' => 'lapangan@wildlife.id', 'password' => 'rahasiaBaru1'])->assertOk();
     }
 }
