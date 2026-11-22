@@ -2,102 +2,78 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Traits\ApiResponse;
 use App\Models\AnimalGeoZone;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 
-class AnimalGeoZoneController extends Controller
+/** Kunjungan satwa ke zona: masuk (POST) dan keluar (PATCH /exit). */
+class AnimalGeoZoneController extends ApiController
 {
-    use ApiResponse;
-
     public function index(Request $request)
     {
-        $query = AnimalGeoZone::with(['animal.species', 'zone']);
+        $query = AnimalGeoZone::query()->with(['animal.species', 'zone', 'entryReading']);
 
-        if ($request->filled('animal_id')) {
-            $query->where('animal_id', $request->animal_id);
+        foreach (['animal_id', 'zone_id'] as $field) {
+            if ($request->filled($field)) {
+                $query->where($field, $request->integer($field));
+            }
         }
-        if ($request->filled('zone_id')) {
-            $query->where('zone_id', $request->zone_id);
+        if ($request->filled('active')) {
+            $request->boolean('active') ? $query->whereNull('exited_at') : $query->whereNotNull('exited_at');
         }
         if ($request->filled('start_date')) {
-            $query->where('entered_at', '>=', $request->start_date);
+            $query->where('entered_at', '>=', $request->date('start_date'));
         }
         if ($request->filled('end_date')) {
-            $query->where('entered_at', '<=', $request->end_date);
+            $query->where('entered_at', '<=', $request->date('end_date')->endOfDay());
         }
 
-        $query->orderBy('entered_at', 'desc');
-
-        return $this->list($query, 'OK', $request);
+        return $this->list($query->orderByDesc('entered_at'));
     }
 
-    public function show($id)
+    public function show(int $id)
     {
-        return $this->success(
-            AnimalGeoZone::with(['animal.species', 'zone'])->findOrFail($id),
-        );
+        return $this->success(AnimalGeoZone::with(['animal.species', 'zone', 'entryReading'])->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'animal_id' => 'required|exists:animals,animal_id',
-            'zone_id' => 'required|exists:geo_zones,zone_id',
-            'entry_reading_id' => 'nullable|exists:gps_readings,reading_id',
-            'entered_at' => 'required|date',
+        $data = $request->validate([
+            'animal_id' => ['required', 'integer', Rule::exists('animals', 'animal_id')->whereNull('deleted_at')],
+            'zone_id' => ['required', 'integer', Rule::exists('geo_zones', 'zone_id')->whereNull('deleted_at')],
+            'entry_reading_id' => 'nullable|integer|exists:gps_readings,reading_id',
+            'entered_at' => 'required|date|before_or_equal:now',
         ]);
 
-        $visit = AnimalGeoZone::create($request->only([
-            'animal_id',
-            'zone_id',
-            'entry_reading_id',
-            'entered_at',
-        ]));
+        $active = AnimalGeoZone::query()
+            ->where('animal_id', $data['animal_id'])
+            ->where('zone_id', $data['zone_id'])
+            ->whereNull('exited_at')
+            ->exists();
 
-        return $this->success(
-            $visit->load(['animal.species', 'zone']),
-            'Visit berhasil dibuat',
-            201,
-        );
-    }
-
-    public function update(Request $request, $id)
-    {
-        $visit = AnimalGeoZone::findOrFail($id);
-        $request->validate(['exited_at' => 'required|date']);
-
-        $exitedAt = Carbon::parse($request->exited_at);
-
-        if ($exitedAt->lessThanOrEqualTo($visit->entered_at)) {
-            throw ValidationException::withMessages([
-                'exited_at' => ['Waktu keluar harus setelah waktu masuk.'],
-            ]);
+        if ($active) {
+            return $this->error('Satwa masih tercatat berada di zona ini. Catat keluar terlebih dahulu.', 409);
         }
 
-        $visit->update(['exited_at' => $exitedAt]);
+        $visit = AnimalGeoZone::create($data);
 
-        return $this->success(
-            $visit->fresh(['animal.species', 'zone']),
-            'Visit diperbarui',
-        );
+        return $this->success($visit->load(['animal', 'zone']), 'Kunjungan zona dicatat', 201);
     }
 
-    public function exit($id)
+    public function exit(Request $request, int $id)
     {
         $visit = AnimalGeoZone::findOrFail($id);
-        $visit->update(['exited_at' => now()]);
 
-        return $this->success($visit->fresh(), 'Animal keluar dari zone');
-    }
+        if ($visit->exited_at !== null) {
+            return $this->error('Kunjungan ini sudah ditutup.', 409);
+        }
 
-    public function destroy($id)
-    {
-        AnimalGeoZone::findOrFail($id)->delete();
+        $data = $request->validate([
+            'exited_at' => 'nullable|date|before_or_equal:now|after_or_equal:' . $visit->entered_at->toDateTimeString(),
+        ]);
 
-        return $this->success(null, 'Visit dihapus');
+        $visit->update(['exited_at' => $data['exited_at'] ?? now()]);
+
+        return $this->success($visit->fresh(['animal', 'zone']), 'Satwa tercatat keluar zona');
     }
 }

@@ -2,151 +2,145 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Traits\ApiResponse;
 use App\Models\GpsReading;
+use App\Models\TrackingDevice;
+use App\Services\GeofenceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
-class GpsReadingController extends Controller
+/** Data telemetri bersifat append-only: tidak ada endpoint update/delete. */
+class GpsReadingController extends ApiController
 {
-    use ApiResponse;
+    public function __construct(private GeofenceService $geofence) {}
 
     public function index(Request $request)
     {
-        $query = GpsReading::with(['device.animal', 'weatherData']);
+        $query = GpsReading::query()->with(['device.animal', 'weatherData']);
 
         if ($request->filled('animal_id')) {
-            $query->whereHas('device', fn($q) => $q->where('animal_id', $request->animal_id));
+            $query->whereHas('device', fn ($q) => $q->where('animal_id', $request->integer('animal_id')));
         }
         if ($request->filled('device_id')) {
-            $query->where('device_id', $request->device_id);
+            $query->where('device_id', $request->integer('device_id'));
         }
         if ($request->filled('start_date')) {
-            $query->where('recorded_at', '>=', $request->start_date);
+            $query->where('recorded_at', '>=', $request->date('start_date'));
         }
         if ($request->filled('end_date')) {
-            $query->where('recorded_at', '<=', $request->end_date);
+            $query->where('recorded_at', '<=', $request->date('end_date')->endOfDay());
         }
-        if ($request->filled('min_altitude')) {
-            $query->where('altitude_meters', '>=', $request->min_altitude);
+        if ($request->filled(['min_lat', 'max_lat', 'min_lon', 'max_lon'])) {
+            $query->whereBetween('latitude', [$request->float('min_lat'), $request->float('max_lat')])
+                ->whereBetween('longitude', [$request->float('min_lon'), $request->float('max_lon')]);
         }
-        if ($request->filled('max_altitude')) {
-            $query->where('altitude_meters', '<=', $request->max_altitude);
+        if ($request->boolean('latest_only')) {
+            $query->whereIn('reading_id', GpsReading::query()->selectRaw('MAX(reading_id)')->groupBy('device_id'));
         }
 
-        $query->orderBy('recorded_at', 'desc');
+        $query->orderByDesc('recorded_at');
 
-        return $this->list($query, 'OK', $request);
+        // Tanpa pagination: batasi ke data terbaru agar dashboard/peta tidak menarik seluruh tabel telemetri.
+        if (! $request->filled('per_page') && ! $request->filled('page')) {
+            $query->limit(min(5000, $request->integer('limit', 2000)));
+        }
+
+        return $this->list($query);
     }
 
-    public function show($id)
+    public function show(int $id)
     {
-        return $this->success(
-            GpsReading::with(['device.animal', 'weatherData'])->findOrFail($id),
-        );
+        return $this->success(GpsReading::with(['device.animal', 'weatherData', 'zoneVisits.zone'])->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'device_id' => 'required|exists:tracking_devices,device_id',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-            'recorded_at' => 'required|date',
-            'altitude_meters' => 'nullable|numeric',
-            'accuracy_meters' => 'nullable|numeric|min:0',
-        ]);
+        $data = $request->validate($this->rules());
 
-        $reading = $this->createReading($data);
+        $reading = DB::transaction(fn () => $this->ingest($data));
 
-        return $this->success(
-            $reading->load(['device.animal', 'weatherData']),
-            'GPS reading berhasil dibuat',
-            201,
-        );
-    }
-
-    public function bulk(Request $request)
-    {
-        $validated = $request->validate([
-            'readings' => 'required|array',
-            'readings.*.device_id' => 'required|exists:tracking_devices,device_id',
-            'readings.*.latitude' => 'required|numeric|between:-90,90',
-            'readings.*.longitude' => 'required|numeric|between:-180,180',
-            'readings.*.recorded_at' => 'required|date',
-            'readings.*.altitude_meters' => 'nullable|numeric',
-            'readings.*.accuracy_meters' => 'nullable|numeric|min:0',
-        ]);
-
-        $created = [];
-
-        foreach ($validated['readings'] as $data) {
-            $created[] = $this->createReading($data);
+        if ($reading === null) {
+            return $this->error('Pembacaan untuk perangkat & waktu tersebut sudah ada.', 409);
         }
 
-        return $this->success($created, count($created) . ' GPS readings berhasil dibuat', 201);
+        return $this->success($reading->load(['device.animal', 'zoneVisits.zone']), 'Pembacaan GPS berhasil disimpan', 201);
     }
 
-    public function update(Request $request, $id)
+    /** Ingest batch; duplikat (device_id, recorded_at) dilewati (idempotent). */
+    public function bulk(Request $request)
     {
-        $reading = GpsReading::findOrFail($id);
-        $data = $request->validate([
-            'latitude' => 'sometimes|numeric|between:-90,90',
-            'longitude' => 'sometimes|numeric|between:-180,180',
-            'recorded_at' => 'sometimes|date',
-            'altitude_meters' => 'nullable|numeric',
-            'accuracy_meters' => 'nullable|numeric|min:0',
-        ]);
+        $rules = ['readings' => 'required|array|min:1|max:1000'];
+        foreach ($this->rules() as $field => $rule) {
+            $rules["readings.*.{$field}"] = $rule;
+        }
+        $validated = $request->validate($rules);
 
-        $reading->update($data);
+        $created = [];
+        $skipped = 0;
+        DB::transaction(function () use ($validated, &$created, &$skipped) {
+            foreach (collect($validated['readings'])->sortBy('recorded_at') as $row) {
+                $reading = $this->ingest($row);
+                $reading ? $created[] = $reading : $skipped++;
+            }
+        });
 
-        return $this->success(
-            $reading->fresh(['device.animal', 'weatherData']),
-            'GPS reading diperbarui',
-        );
+        return $this->success([
+            'created' => count($created),
+            'skipped_duplicates' => $skipped,
+            'readings' => $created,
+        ], count($created) . ' pembacaan GPS disimpan', 201);
     }
 
-    public function destroy($id)
+    private function rules(): array
     {
-        GpsReading::findOrFail($id)->delete();
-
-        return $this->success(null, 'GPS reading dihapus');
+        return [
+            'device_id' => 'required|integer|exists:tracking_devices,device_id',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            'recorded_at' => 'required|date|before_or_equal:' . now()->addMinutes(5)->toDateTimeString(),
+            'altitude_meters' => 'nullable|numeric|between:-500,9000',
+            'accuracy_meters' => 'nullable|numeric|between:0,9999',
+            'checksum' => 'nullable|string|size:64',
+            'battery_level' => 'nullable|integer|between:0,100',
+            'signal_strength' => 'nullable|integer|between:0,100',
+        ];
     }
 
-    public function byAnimal($animalId)
+    private function ingest(array $data): ?GpsReading
     {
-        $readings = GpsReading::whereHas('device', fn($q) => $q->where('animal_id', $animalId))
-            ->with(['device.animal'])
-            ->orderBy('recorded_at', 'desc')
-            ->limit(1000)
-            ->get();
+        $recordedAt = Carbon::parse($data['recorded_at']);
 
-        return $this->list($readings);
-    }
+        $exists = GpsReading::query()
+            ->where('device_id', $data['device_id'])
+            ->where('recorded_at', $recordedAt)
+            ->exists();
+        if ($exists) {
+            return null;
+        }
 
-    public function byDevice($deviceId)
-    {
-        $readings = GpsReading::where('device_id', $deviceId)
-            ->with(['device.animal'])
-            ->orderBy('recorded_at', 'desc')
-            ->limit(1000)
-            ->get();
-
-        return $this->list($readings);
-    }
-
-    private function createReading(array $data): GpsReading
-    {
         $payload = [
-            'device_id' => $data['device_id'],
-            'latitude' => $data['latitude'],
-            'longitude' => $data['longitude'],
-            'recorded_at' => $data['recorded_at'],
+            'device_id' => (int) $data['device_id'],
+            'latitude' => (float) $data['latitude'],
+            'longitude' => (float) $data['longitude'],
+            'recorded_at' => $recordedAt->toDateTimeString(),
             'altitude_meters' => $data['altitude_meters'] ?? null,
             'accuracy_meters' => $data['accuracy_meters'] ?? null,
         ];
-        $payload['checksum'] = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+        $payload['checksum'] = $data['checksum'] ?? hash('sha256', json_encode($payload));
 
-        return GpsReading::create($payload);
+        $reading = GpsReading::create($payload);
+
+        $device = TrackingDevice::find($payload['device_id']);
+        if (isset($data['battery_level']) || isset($data['signal_strength'])) {
+            $device->update(array_filter([
+                'battery_level' => $data['battery_level'] ?? null,
+                'signal_strength' => $data['signal_strength'] ?? null,
+            ], fn ($v) => $v !== null));
+        }
+
+        $reading->setRelation('device', $device);
+        $this->geofence->handleReading($reading);
+
+        return $reading;
     }
 }

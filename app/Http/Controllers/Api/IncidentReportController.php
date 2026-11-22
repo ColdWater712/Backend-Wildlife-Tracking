@@ -2,139 +2,152 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Traits\ApiResponse;
-use App\Models\IncidentReport;
 use App\Models\AiMediaUpload;
+use App\Models\IncidentReport;
+use App\Services\AiPredictionService;
+use App\Services\GeoService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
-class IncidentReportController extends Controller
+class IncidentReportController extends ApiController
 {
-    use ApiResponse;
+    private const RELATIONS = ['reporter', 'animal', 'species', 'zone'];
+
+    public function __construct(private GeoService $geo) {}
 
     public function index(Request $request)
     {
-        $query = IncidentReport::with(['reporter', 'animal', 'species']);
+        $query = IncidentReport::query()->with(self::RELATIONS);
 
-        if ($request->filled('incident_type')) $query->where('incident_type', $request->incident_type);
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('animal_id')) $query->where('animal_id', $request->animal_id);
-        if ($request->filled('species_id')) $query->where('species_id', $request->species_id);
-        if ($request->filled('reporter_id')) $query->where('reported_by', $request->reporter_id);
-        if ($request->filled('start_date')) $query->where('timestamp', '>=', $request->start_date);
-        if ($request->filled('end_date')) $query->where('timestamp', '<=', $request->end_date);
+        foreach (['incident_type', 'status', 'sync_status', 'source'] as $field) {
+            if ($request->filled($field)) {
+                $query->where($field, $request->input($field));
+            }
+        }
+        foreach (['animal_id', 'species_id', 'zone_id', 'user_id'] as $field) {
+            if ($request->filled($field)) {
+                $query->where($field, $request->integer($field));
+            }
+        }
+        if ($request->filled('reported_by')) {
+            $query->where('user_id', $request->integer('reported_by'));
+        }
+        if ($request->filled('animal_code')) {
+            $query->whereHas('animal', fn ($q) => $q->where('name_animal', $request->animal_code));
+        }
+        if ($request->filled('start_date')) {
+            $query->where('timestamp', '>=', $request->date('start_date'));
+        }
+        if ($request->filled('end_date')) {
+            $query->where('timestamp', '<=', $request->date('end_date')->endOfDay());
+        }
         if ($request->filled('search')) {
-            $query->where('description', 'like', "%" . $request->search . "%");
+            $s = $request->search;
+            $query->where(fn ($q) => $q->where('description', 'like', "%{$s}%")->orWhere('location', 'like', "%{$s}%"));
         }
 
-        $query->orderBy('timestamp', 'desc');
-        return $this->list($query, 'OK', $request);
+        $this->applySort($query, $request, ['report_id', 'timestamp', 'incident_type', 'status'], 'timestamp');
+
+        return $this->list($query);
     }
 
-    public function show($id)
+    public function show(int $id)
     {
-        return $this->success(IncidentReport::with(['reporter', 'animal', 'species', 'media'])->findOrFail($id));
+        return $this->success(IncidentReport::with([...self::RELATIONS, 'media.predictions'])->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $request->validate([
-            'incident_type' => 'required|string',
-            'description'   => 'required|string',
-            'timestamp'     => 'required|date',
-            'latitude'      => 'required|numeric',
-            'longitude'     => 'required|numeric',
-            'location'      => 'nullable|string',
-            'animal_id'     => 'nullable|exists:animals,animal_id',
-            'species_id'    => 'nullable|exists:species,species_id',
-            'status'        => 'sometimes|string',
-        ]);
+        $data = $this->validated($request);
+        $data['user_id'] = $request->user()->user_id;
+        $data['zone_id'] ??= $this->geo->resolveZone($data['latitude'] ?? null, $data['longitude'] ?? null, 0)?->zone_id;
+        $data['sync_status'] = 'synced';
 
-        $incident = IncidentReport::create([
-            'incident_type' => $request->incident_type,
-            'description'   => $request->description,
-            'timestamp'     => $request->timestamp,
-            'latitude'      => $request->latitude,
-            'longitude'     => $request->longitude,
-            'location'      => $request->input('location', 'Lokasi Tidak Diketahui'), // WAJIB ADA
-            'animal_id'     => $request->animal_id,
-            'species_id'    => $request->species_id,
-            'reported_by'   => $request->user()->user_id,
-            'status'        => $request->input('status', 'pending'),
-        ]);
+        $incident = IncidentReport::create($data);
 
-        return $this->success($incident->load(['reporter', 'animal', 'species']), 'Incident berhasil dibuat', 201);
+        return $this->success($incident->load(self::RELATIONS), 'Laporan insiden berhasil dibuat', 201);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id)
     {
         $incident = IncidentReport::findOrFail($id);
-        $request->validate([
-            'incident_type' => 'sometimes|string',
-            'description'   => 'sometimes|string',
-            'timestamp'     => 'sometimes|date',
-            'latitude'      => 'sometimes|numeric',
-            'longitude'     => 'sometimes|numeric',
-            'location'      => 'nullable|string',
-            'animal_id'     => 'nullable|exists:animals,animal_id',
-            'species_id'    => 'nullable|exists:species,species_id',
-            'status'        => 'sometimes|string',
-        ]);
+        $user = $request->user();
 
-        $incident->update($request->only([
-            'incident_type', 'description', 'timestamp', 'latitude', 'longitude',
-            'location', 'animal_id', 'species_id', 'status'
-        ]));
+        if ((int) $incident->user_id !== (int) $user->user_id && ! $user->hasPermission('delete_data')) {
+            return $this->error('Hanya pelapor atau administrator yang dapat mengubah laporan ini.', 403);
+        }
 
-        return $this->success($incident->fresh(['reporter', 'animal', 'species']), 'Incident diperbarui');
+        $incident->update($this->validated($request, $incident));
+
+        return $this->success($incident->fresh(self::RELATIONS), 'Laporan insiden diperbarui');
     }
 
-    public function destroy($id)
+    public function destroy(int $id)
     {
         IncidentReport::findOrFail($id)->delete();
-        return $this->success(null, 'Incident dihapus');
+
+        return $this->success(null, 'Laporan insiden dihapus');
     }
 
-    public function updateSyncStatus(Request $request, $id)
+    /** Hanya proses sinkronisasi / admin yang boleh mengubah sync_status. */
+    public function updateSyncStatus(Request $request, int $id)
     {
         $incident = IncidentReport::findOrFail($id);
-        $request->validate(['sync_status' => 'required|in:synced,pending_sync,failed']);
-        $incident->update(['sync_status' => $request->sync_status]);
-        return $this->success($incident->fresh(), 'Sync status diperbarui');
+        $incident->update($request->validate(['sync_status' => 'required|in:pending_sync,synced,failed']));
+
+        return $this->success($incident->fresh(self::RELATIONS), 'Status sinkronisasi diperbarui');
     }
 
-    public function media($id)
+    public function media(int $id)
     {
-        $incident = IncidentReport::findOrFail($id);
-        $media = AiMediaUpload::where('report_id', $incident->getKey())->get();
-        return $this->list($media);
+        IncidentReport::findOrFail($id);
+
+        return $this->list(AiMediaUpload::query()->with('predictions')->where('report_id', $id)->orderByDesc('uploaded_at'));
     }
 
-    public function uploadMedia(Request $request, $id)
+    /** Unggah bukti (foto/video/audio). ?analyze=1 untuk langsung dianalisis AI. */
+    public function uploadMedia(Request $request, AiPredictionService $ai, int $id)
     {
         $incident = IncidentReport::findOrFail($id);
-        $request->validate(['file' => 'required|file|mimes:jpg,jpeg,png|max:10240']);
-
-        $file = $request->file('file');
-        $path = $file->store('incident-media', 'public');
-
-        $media = AiMediaUpload::create([
-            'uploaded_by' => $request->user()->user_id,
-            'report_id'   => $incident->getKey(),
-            'media_type'  => 'image',
-            'file_path'   => $path,
+        $request->validate([
+            'file' => 'required|file|mimes:jpg,jpeg,png,webp,mp4,mov,webm,wav,mp3,m4a,ogg|max:51200',
+            'analyze' => 'sometimes|boolean',
         ]);
 
-        return $this->success($media, 'Media berhasil diupload', 201);
+        $media = $ai->storeMedia($request->file('file'), [
+            'uploaded_by' => $request->user()->user_id,
+            'report_id' => $incident->report_id,
+            'zone_id' => $incident->zone_id,
+            'latitude' => $incident->latitude,
+            'longitude' => $incident->longitude,
+            'captured_at' => $incident->timestamp,
+        ]);
+
+        $prediction = $request->boolean('analyze') ? $ai->process($media) : null;
+
+        return $this->success(
+            $prediction ? ['media' => $media, 'prediction' => $prediction] : $media,
+            'Media berhasil diunggah',
+            201,
+        );
     }
 
-    public function byAnimal($animalId)
+    private function validated(Request $request, ?IncidentReport $incident = null): array
     {
-        $incidents = IncidentReport::where('animal_id', $animalId)
-            ->with(['reporter', 'species'])
-            ->orderBy('timestamp', 'desc')
-            ->get();
-        return $this->list($incidents);
+        $required = $incident ? 'sometimes' : 'required';
+
+        return $request->validate([
+            'incident_type' => "{$required}|string|max:100",
+            'description' => "{$required}|string|max:5000",
+            'timestamp' => "{$required}|date|before_or_equal:" . now()->addMinutes(5)->toDateTimeString(),
+            'latitude' => "{$required}|numeric|between:-90,90",
+            'longitude' => "{$required}|numeric|between:-180,180",
+            'location' => 'nullable|string|max:255',
+            'animal_id' => ['nullable', 'integer', Rule::exists('animals', 'animal_id')->whereNull('deleted_at')],
+            'species_id' => ['nullable', 'integer', Rule::exists('species', 'species_id')->whereNull('deleted_at')],
+            'zone_id' => 'nullable|integer|exists:geo_zones,zone_id',
+            'photo_url' => 'nullable|url|max:500',
+            'status' => 'sometimes|string|max:50',
+        ]);
     }
 }

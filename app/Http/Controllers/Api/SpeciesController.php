@@ -2,76 +2,78 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreSpeciesRequest;
-use App\Http\Requests\UpdateSpeciesRequest;
-use App\Http\Traits\ApiResponse;
 use App\Models\Species;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
-class SpeciesController extends Controller
+class SpeciesController extends ApiController
 {
-    use ApiResponse;
+    public const CONSERVATION_STATUSES = [
+        'Least Concern', 'Near Threatened', 'Vulnerable', 'Endangered',
+        'Critically Endangered', 'Extinct in the Wild', 'Extinct', 'Data Deficient',
+    ];
 
     public function index(Request $request)
     {
-        $query = Species::withCount('animals');
+        $query = Species::query()->withCount('animals as animal_count');
 
         if ($request->filled('search')) {
             $s = $request->search;
-            $query->where(fn($q) => $q->where('common_name', 'like', "%{$s}%")->orWhere('scientific_name', 'like', "%{$s}%"));
+            $query->where(fn ($q) => $q->where('common_name', 'like', "%{$s}%")->orWhere('scientific_name', 'like', "%{$s}%"));
         }
-        if ($request->filled('conservation_status') && $request->conservation_status !== 'all') {
+        if ($request->filled('conservation_status')) {
             $query->where('conservation_status', $request->conservation_status);
         }
 
-        $query->orderBy($request->input('orderBy', 'species_id'), $request->input('order', 'asc'));
+        $this->applySort($query, $request, ['species_id', 'common_name', 'scientific_name', 'conservation_status', 'created_at'], 'species_id', 'asc');
 
-        // ✅ FE species.service pakai unwrapData → array
-        return $this->list($query->get());
+        return $this->list($query);
     }
 
-    public function show($id)
+    public function show(int $id)
     {
-        return $this->success(Species::with(['animals' => fn($q) => $q->where('species_id', $id)])->findOrFail($id));
+        return $this->success(
+            Species::withCount('animals as animal_count')->with('animals')->findOrFail($id)
+        );
     }
 
-    public function store(StoreSpeciesRequest $request)
+    public function store(Request $request)
     {
-        $species = Species::create($request->validated());
+        $species = Species::create($this->validated($request));
 
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'CREATE_SPECIES',
-            'details' => json_encode(['species_id' => $species->species_id]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($species, 'Spesies berhasil dibuat', 201);
+        return $this->success($species->loadCount('animals as animal_count'), 'Spesies berhasil dibuat', 201);
     }
 
-    public function update(UpdateSpeciesRequest $request, $id)
+    public function update(Request $request, int $id)
     {
         $species = Species::findOrFail($id);
-        $species->update($request->validated());
+        $species->update($this->validated($request, $species));
 
-        \App\Models\ActivityLog::create([
-            'user_id' => $request->user()->user_id, 'action' => 'UPDATE_SPECIES',
-            'details' => json_encode(['species_id' => $species->species_id]), 'timestamp' => now(),
-        ]);
-
-        return $this->success($species->fresh(), 'Spesies diperbarui');
+        return $this->success($species->fresh()->loadCount('animals as animal_count'), 'Spesies diperbarui');
     }
 
-    public function destroy($id)
+    public function destroy(int $id)
     {
-        $species = Species::findOrFail($id);
-        if ($species->animals()->count() > 0) return $this->error('Spesies masih memiliki satwa terkait', 422);
+        $species = Species::withCount('animals')->findOrFail($id);
+
+        if ($species->animals_count > 0) {
+            return $this->error("Spesies masih memiliki {$species->animals_count} satwa terkait.", 409);
+        }
+
         $species->delete();
 
-        \App\Models\ActivityLog::create([
-            'user_id' => auth()->id(), 'action' => 'DELETE_SPECIES',
-            'details' => json_encode(['species_id' => $id]), 'timestamp' => now(),
-        ]);
-
         return $this->success(null, 'Spesies dihapus');
+    }
+
+    private function validated(Request $request, ?Species $species = null): array
+    {
+        $required = $species ? 'sometimes' : 'required';
+
+        return $request->validate([
+            'common_name' => "{$required}|string|max:100",
+            'scientific_name' => [$required, 'string', 'max:150',
+                Rule::unique('species', 'scientific_name')->ignore($species?->species_id, 'species_id')],
+            'conservation_status' => [$required, Rule::in(self::CONSERVATION_STATUSES)],
+        ]);
     }
 }
