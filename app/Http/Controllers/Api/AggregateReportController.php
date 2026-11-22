@@ -2,120 +2,150 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Traits\ApiResponse;
 use App\Models\AggregateReport;
+use App\Services\MonitoringStatsService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
-class AggregateReportController extends Controller
+/** Laporan agregat dihasilkan sistem (generate) — tidak diedit manual. */
+class AggregateReportController extends ApiController
 {
-    use ApiResponse;
+    private const DISK = 'local';
 
     public function index(Request $request)
     {
-        $query = AggregateReport::with(['generatedBy']);
+        $query = AggregateReport::query()->with('generator');
 
-        if ($request->filled('report_type')) $query->where('report_type', $request->report_type);
-        if ($request->filled('start_date')) $query->where('period_start', '>=', $request->start_date);
-        if ($request->filled('end_date')) $query->where('period_end', '<=', $request->end_date);
+        if ($request->filled('report_type')) {
+            $query->where('report_type', $request->report_type);
+        }
+        if ($request->filled('period_start') || $request->filled('start_date')) {
+            $query->where('period_start', '>=', $request->input('period_start', $request->input('start_date')));
+        }
+        if ($request->filled('period_end') || $request->filled('end_date')) {
+            $query->where('period_end', '<=', $request->input('period_end', $request->input('end_date')));
+        }
 
-        $query->orderBy('generated_at', 'desc');
-
-        return $this->list($query, 'OK', $request);
+        return $this->list($query->orderByDesc('generated_at'));
     }
 
-    public function show($id)
+    public function show(int $id)
     {
-        return $this->success(
-            AggregateReport::with(['generatedBy'])->findOrFail($id)
+        return $this->success(AggregateReport::with('generator')->findOrFail($id));
+    }
+
+    public function generate(Request $request, MonitoringStatsService $stats)
+    {
+        $data = $request->validate([
+            'report_type' => 'required|in:daily,weekly,monthly',
+            'period_start' => 'nullable|date|before_or_equal:today',
+            'period_end' => 'nullable|date|after_or_equal:period_start',
+            'overwrite' => 'sometimes|boolean',
+        ]);
+
+        [$start, $end] = $this->period($data['report_type'], $data['period_start'] ?? null, $data['period_end'] ?? null);
+
+        $existing = AggregateReport::query()
+            ->where('report_type', $data['report_type'])
+            ->whereDate('period_start', $start)
+            ->whereDate('period_end', $end)
+            ->first();
+
+        if ($existing && ! $request->boolean('overwrite')) {
+            return $this->error('Laporan untuk periode ini sudah ada. Kirim overwrite=true untuk membuat ulang.', 409, ['report_id' => [$existing->report_id]]);
+        }
+
+        $reportData = $stats->collect($start, $end);
+        $path = "reports/{$data['report_type']}_{$start}_{$end}.csv";
+        Storage::disk(self::DISK)->put($path, $this->toCsv($data['report_type'], $start, $end, $reportData));
+
+        $report = AggregateReport::updateOrCreate(
+            ['report_type' => $data['report_type'], 'period_start' => $start, 'period_end' => $end],
+            ['generated_by' => $request->user()->user_id, 'report_data' => $reportData, 'generated_at' => now(), 'file_path' => $path],
         );
+
+        return $this->success($report->load('generator'), 'Laporan berhasil dibuat', 201);
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'title'       => 'required|string',
-            'content'     => 'required|string',
-            'period_start' => 'required|date',
-            'period_end'   => 'required|date|after_or_equal:period_start',
-            'report_type' => 'sometimes|string',
-        ]);
-
-        $report = AggregateReport::create([
-            'title'        => $request->title,
-            'content'      => $request->content,
-            'period_start' => $request->period_start,
-            'period_end'   => $request->period_end,
-            'report_type'  => $request->input('report_type', 'manual'),
-            'generated_by' => $request->user()->user_id,
-            'generated_at' => now(),
-        ]);
-
-        return $this->success($report->load(['generatedBy']), 'Report berhasil dibuat', 201);
-    }
-
-    public function generate(Request $request)
-    {
-        $request->validate([
-            'period_start' => 'required|date',
-            'period_end'   => 'required|date|after_or_equal:period_start',
-            'report_type'  => 'sometimes|string',
-        ]);
-
-        // Generate report content dari data
-        $content = $this->generateReportContent($request->period_start, $request->period_end);
-
-        $report = AggregateReport::create([
-            'title'        => "Laporan {$request->report_type} - {$request->period_start} s/d {$request->period_end}",
-            'content'      => $content,
-            'period_start' => $request->period_start,
-            'period_end'   => $request->period_end,
-            'report_type'  => $request->input('report_type', 'auto'),
-            'generated_by' => $request->user()->user_id,
-            'generated_at' => now(),
-        ]);
-
-        return $this->success($report->load(['generatedBy']), 'Report berhasil digenerate', 201);
-    }
-
-    public function update(Request $request, $id)
+    public function download(int $id)
     {
         $report = AggregateReport::findOrFail($id);
-        $request->validate([
-            'title'   => 'sometimes|string',
-            'content' => 'sometimes|string',
-        ]);
+        $disk = Storage::disk(self::DISK);
 
-        $report->update($request->only(['title', 'content']));
-        return $this->success($report->fresh(['generatedBy']), 'Report diperbarui');
+        if (! $report->file_path || ! $disk->exists($report->file_path)) {
+            return $this->error('Berkas laporan tidak ditemukan. Silakan generate ulang.', 404);
+        }
+
+        return $disk->download($report->file_path, basename($report->file_path), ['Content-Type' => 'text/csv']);
     }
 
-    public function destroy($id)
-    {
-        AggregateReport::findOrFail($id)->delete();
-        return $this->success(null, 'Report dihapus');
-    }
-
-    public function download($id)
+    public function destroy(int $id)
     {
         $report = AggregateReport::findOrFail($id);
-        $content = "Title: {$report->title}\nPeriod: {$report->period_start} to {$report->period_end}\n\n{$report->content}";
-        
-        return response($content)
-            ->header('Content-Type', 'text/plain')
-            ->header('Content-Disposition', 'attachment; filename="report_{$id}.txt"');
+
+        if ($report->file_path) {
+            Storage::disk(self::DISK)->delete($report->file_path);
+        }
+        $report->delete();
+
+        return $this->success(null, 'Laporan dihapus');
     }
 
-    protected function generateReportContent(string $start, string $end): string
+    /** Periode default: kemarin (daily), 7 hari terakhir (weekly), bulan lalu (monthly). */
+    private function period(string $type, ?string $start, ?string $end): array
     {
-        $animals = \App\Models\Animal::whereBetween('created_at', [$start, $end])->count();
-        $incidents = \App\Models\IncidentReport::whereBetween('timestamp', [$start, $end])->count();
-        $readings = \App\Models\GpsReading::whereBetween('recorded_at', [$start, $end])->count();
+        if ($start) {
+            $from = Carbon::parse($start);
+            $to = $end ? Carbon::parse($end) : match ($type) {
+                'daily' => $from->copy(),
+                'weekly' => $from->copy()->addDays(6),
+                'monthly' => $from->copy()->endOfMonth(),
+            };
 
-        return "Laporan Periode {$start} - {$end}\n\n" .
-               "Total Animals: {$animals}\n" .
-               "Total Incidents: {$incidents}\n" .
-               "Total GPS Readings: {$readings}\n";
+            return [$from->toDateString(), $to->toDateString()];
+        }
+
+        return match ($type) {
+            'daily' => [now()->subDay()->toDateString(), now()->subDay()->toDateString()],
+            'weekly' => [now()->subDays(7)->toDateString(), now()->subDay()->toDateString()],
+            'monthly' => [now()->subMonthNoOverflow()->startOfMonth()->toDateString(), now()->subMonthNoOverflow()->endOfMonth()->toDateString()],
+        };
+    }
+
+    private function toCsv(string $type, string $start, string $end, array $data): string
+    {
+        $handle = fopen('php://temp', 'r+');
+        fputcsv($handle, ['Laporan Agregat Wildlife Tracking']);
+        fputcsv($handle, ['Tipe', $type]);
+        fputcsv($handle, ['Periode', "{$start} s/d {$end}"]);
+        fputcsv($handle, ['Dibuat', now()->toDateTimeString()]);
+        fputcsv($handle, []);
+        fputcsv($handle, ['Statistik', 'Nilai']);
+        foreach ($data['statistics'] as $key => $value) {
+            fputcsv($handle, [$key, $value]);
+        }
+        fputcsv($handle, []);
+        fputcsv($handle, ['Spesies', 'Nama Ilmiah', 'Jumlah Individu', 'Status Konservasi']);
+        foreach ($data['species_breakdown'] as $row) {
+            fputcsv($handle, [$row['common_name'], $row['scientific_name'], $row['count'], $row['status']]);
+        }
+        fputcsv($handle, []);
+        fputcsv($handle, ['Jenis Insiden', 'Jumlah']);
+        foreach ($data['incidents_by_type'] as $typeName => $count) {
+            fputcsv($handle, [$typeName, $count]);
+        }
+        foreach ($data['ai_insights'] as $section => $rows) {
+            fputcsv($handle, []);
+            fputcsv($handle, ["AI: {$section}", 'Jumlah']);
+            foreach ($rows as $key => $count) {
+                fputcsv($handle, [$key, $count]);
+            }
+        }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return "\xEF\xBB\xBF" . $csv;
     }
 }
